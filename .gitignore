@@ -129,5 +129,6 @@ dmypy.json
 .pyre/
 
 # Other added folders
+.idea/
 data/
 images/
