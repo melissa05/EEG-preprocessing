@@ -3,16 +3,20 @@ import sys
 import tkinter
 from pathlib import Path
 
-import numpy as np
 import pyxdf
-from matplotlib import pyplot as plt
-from scipy.signal import butter, sosfilt, iirnotch, lfilter
+from scipy.fft import fft
+from numpy import *
+from scipy.signal import *
+from numpy import *
+from matplotlib import *
+from scipy import *
+from pylab import *
+import pandas as pd
 
 
 def get_path():
-    name = 'tkinter'
 
-    if name in sys.modules:
+    if 'tkinter' in sys.modules:
         from tkinter import filedialog
         path_selected = filedialog.askopenfilename(initialdir=os.getcwd(), title="Select a File",
                                                    filetypes=(("xdf files", "*.xdf*"),))
@@ -22,19 +26,24 @@ def get_path():
     return path_selected
 
 
-def get_folder(path):
+def get_info_from_path(path):
 
     base = os.path.dirname(path)
-    base = base.split('data/')[1]
+    folder = base.split('data/')[1]
 
-    return base
-
-
-def get_filename(path):
     base = os.path.basename(path)
-    file = os.path.splitext(base)[0]
+    file_name = os.path.splitext(base)[0]
 
-    return file
+    subject = (file_name.split('sub-')[1]).split('_')[0]
+    session = (file_name.split('ses-')[1]).split('_')[0]
+    run = 'R' + (file_name.split('run-')[1]).split('_')[0]
+
+    output_folder = '/sub-' + subject + '/ses-' + session + '/run-' + run + '/'
+
+    infos = {'folder': folder, 'file_name': file_name, 'subject': subject, 'session': session, 'run': run,
+             'output_folder': output_folder}
+
+    return infos
 
 
 def load_xdf(path):
@@ -57,6 +66,7 @@ def load_xdf(path):
 
 
 def load_channel_names(path):
+
     with open(path) as f:
         lines = f.readlines()
 
@@ -70,6 +80,7 @@ def load_channel_names(path):
             dict_channels_name[number] = name
 
     return dict_channels_name
+
 
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=8):
 
@@ -86,10 +97,9 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=8):
 
 if __name__ == '__main__':
 
-    # path = get_path()
-    path = 'C:/Users/giuli/Documents/Università/Traineeship/eeg-preprocessing/data/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task-Default_run-002_eeg.xdf'
-    filename = get_filename(path)
-    foldername = get_folder(path)
+    path = get_path()
+    # path = 'C:/Users/giuli/Documents/Università/Traineeship/eeg-preprocessing/data/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task-Default_run-001_eeg.xdf'
+    file_info = get_info_from_path(path)
 
     [_, eeg, marker, eeg_freq] = load_xdf(path)
 
@@ -100,13 +110,50 @@ if __name__ == '__main__':
     eeg = eeg[500:eeg.shape[0]-500]
     eeg = eeg - np.mean(eeg, axis=0)
 
-    for (number, name) in channels_name.items():
+    for (number, channel_name) in channels_name.items():
 
-        eeg_filt = butter_bandpass_filter(eeg[:, int(number)-1], lowcut=0.1, highcut=80, fs=eeg_freq, order=8)
+        data = butter_bandpass_filter(eeg[:, int(number)-1], lowcut=0.1, highcut=60, fs=eeg_freq, order=8)
+        eeg[:, int(number)-1] = data
 
-        Path('images/'+foldername).mkdir(parents=True, exist_ok=True)
+        Path('images/'+file_info['output_folder']).mkdir(parents=True, exist_ok=True)
 
-        plt.plot(eeg_filt)
-        plt.title(name)
-        plt.savefig('images/'+foldername+'/'+filename+'_'+name+'_signal.jpg')
+        plt.plot(data)
+        plt.title(channel_name)
+        plt.xlabel('Time (s)')
+        plt.ylabel('Amplitude (uV)')
+        plt.tight_layout()
+        plt.savefig('images/' + file_info['output_folder'] + '/' + channel_name + '_signal.jpg')
+        plt.show()
+
+        # COMPUTATION OF POWER BANDS
+
+        # Get real amplitudes of FFT (only in postive frequencies)
+        fft_vals = np.absolute(np.fft.rfft(data))
+
+        # Get frequencies for amplitudes in Hz
+        fft_freq = np.fft.rfftfreq(len(data), 1.0 / eeg_freq)
+
+        # Define EEG bands
+        eeg_bands = {'Delta': (0.5, 4),
+                     'Theta': (4, 8),
+                     'Alpha': (8, 12),
+                     'Beta': (12, 30),
+                     'Gamma': (30, 60)}
+
+        # Take the mean of the fft amplitude for each EEG band
+        eeg_band_fft = {}
+        for band in eeg_bands:
+            freq_ix = np.where((fft_freq >= eeg_bands[band][0]) &
+                               (fft_freq <= eeg_bands[band][1]))[0]
+            eeg_band_fft[band] = np.mean(fft_vals[freq_ix]) # qui mettere power se si vuole vedere PSD e non magnitude
+
+        df = pd.DataFrame(columns=['band', 'val'])
+        df['band'] = eeg_bands.keys()
+        df['val'] = [eeg_band_fft[band] for band in eeg_bands]
+        ax = df.plot.bar(x='band', y='val', legend=False, color=['b', 'orange', 'g', 'r', 'purple'])
+        ax.set_xlabel("EEG band")
+        ax.set_ylabel("Mean band Amplitude")
+        plt.title(channel_name)
+        plt.tight_layout()
+        plt.savefig('images/' + file_info['output_folder'] + '/' + channel_name + '_bands_power.jpg')
         plt.show()
