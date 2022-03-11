@@ -1,6 +1,8 @@
 import os
 import sys
 import tkinter
+from pathlib import Path
+
 import numpy as np
 import pyxdf
 from matplotlib import pyplot as plt
@@ -20,14 +22,19 @@ def get_path():
     return path_selected
 
 
-def get_subject_name(path):
+def get_folder(path):
+
+    base = os.path.dirname(path)
+    base = base.split('data/')[1]
+
+    return base
+
+
+def get_filename(path):
     base = os.path.basename(path)
     file = os.path.splitext(base)[0]
 
-    x = file.split('-', 1)[1]
-    x = x.split('_ses', 1)[0]
-
-    return x
+    return file
 
 
 def load_xdf(path):
@@ -65,6 +72,7 @@ def load_channel_names(path):
     return dict_channels_name
 
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=8):
+
     low = lowcut / fs
     high = highcut / fs
     sos = butter(order, [low, high], analog=False, btype='band', output='sos')
@@ -72,22 +80,33 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=8):
 
     b, a = iirnotch(50, Q=150, fs=fs)
     y = lfilter(b, a, y)
+
     return y
 
 
 if __name__ == '__main__':
 
     # path = get_path()
-    path = 'C:/Users/giuli/Documents/Università/Traineeship/eeg-preprocessing/data/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task-Default_run-001_eeg.xdf'
-    filename = get_subject_name(path)
+    path = 'C:/Users/giuli/Documents/Università/Traineeship/eeg-preprocessing/data/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task-Default_run-002_eeg.xdf'
+    filename = get_filename(path)
+    foldername = get_folder(path)
+
     [_, eeg, marker, eeg_freq] = load_xdf(path)
 
     path_channel = 'C:/Users/giuli/Documents/Università/Traineeship/eeg-preprocessing/data/Channels - Explore_CA46.txt'
     channels_name = load_channel_names(path_channel)
 
     eeg = np.asmatrix(eeg)
+    eeg = eeg[500:eeg.shape[0]-500]
     eeg = eeg - np.mean(eeg, axis=0)
-    eeg_filt = butter_bandpass_filter(eeg, lowcut=0.1, highcut=40, fs=eeg_freq, order=8)
 
-    plt.plot(eeg_filt)
-    plt.show()
+    for (number, name) in channels_name.items():
+
+        eeg_filt = butter_bandpass_filter(eeg[:, int(number)-1], lowcut=0.1, highcut=80, fs=eeg_freq, order=8)
+
+        Path('images/'+foldername).mkdir(parents=True, exist_ok=True)
+
+        plt.plot(eeg_filt)
+        plt.title(name)
+        plt.savefig('images/'+foldername+'/'+filename+'_'+name+'_signal.jpg')
+        plt.show()
