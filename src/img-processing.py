@@ -5,8 +5,8 @@ import numpy as np
 if __name__ == '__main__':
 
     seen = False
-    path = 'C:/Users/Giulia Pezzutti/Documents/Datasets/Sophie Dataset/Faces_120_h.jpg'
-    name = os. path. splitext(os.path.basename(path.rstrip(os.sep)))[0]
+    path = 'C:/Users/Giulia Pezzutti/Documents/Datasets/Sophie Dataset/Faces_134_h.jpg'
+    name = os.path.splitext(os.path.basename(path.rstrip(os.sep)))[0]
     save_path = 'C:/Users/Giulia Pezzutti/Documents/Datasets/Sophie Dataset Processed/'
 
     # ORIGINAL

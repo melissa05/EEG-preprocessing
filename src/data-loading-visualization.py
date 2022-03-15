@@ -3,6 +3,7 @@ import sys
 import tkinter
 from pathlib import Path
 
+import mne
 import pyxdf
 from scipy.fft import fft
 from numpy import *
@@ -15,19 +16,18 @@ import pandas as pd
 
 
 def get_path():
-
     if 'tkinter' in sys.modules:
         from tkinter import filedialog
         path_selected = filedialog.askopenfilename(initialdir=os.getcwd(), title="Select a File",
                                                    filetypes=(("xdf files", "*.xdf*"),))
     else:
-        path_selected = input("Not able to use tkinter to select the file. Insert here the file path and press ENTER:\n")
+        path_selected = input(
+            "Not able to use tkinter to select the file. Insert here the file path and press ENTER:\n")
 
     return path_selected
 
 
 def get_info_from_path(path):
-
     base = os.path.dirname(path)
     folder = base.split('data/')[1]
 
@@ -66,7 +66,6 @@ def load_xdf(path):
 
 
 def load_channel_names(path):
-
     with open(path) as f:
         lines = f.readlines()
 
@@ -75,15 +74,14 @@ def load_channel_names(path):
         s = line.replace(' ', '')
         s = s.replace('\n', '')
 
-        number, name = s.split('-')
-        if name != 'GND':
-            dict_channels_name[number] = name
+        channel_number, channel_name = s.split('-')
+        if channel_name != 'GND':
+            dict_channels_name[channel_number] = channel_name
 
     return dict_channels_name
 
 
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=8):
-
     low = lowcut / fs
     high = highcut / fs
     sos = butter(order, [low, high], analog=False, btype='band', output='sos')
@@ -97,25 +95,31 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=8):
 
 if __name__ == '__main__':
 
-    path = get_path()
+    # path = get_path()
+    path = 'C:/Users/Giulia Pezzutti/Documents/eeg-preprocessing/data/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task-Default_run-001_eeg.xdf'
     # path = 'C:/Users/giuli/Documents/Università/Traineeship/eeg-preprocessing/data/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task-Default_run-001_eeg.xdf'
     file_info = get_info_from_path(path)
 
     [_, eeg, marker, eeg_freq] = load_xdf(path)
 
-    path_channel = 'C:/Users/giuli/Documents/Università/Traineeship/eeg-preprocessing/data/Channels - Explore_CA46.txt'
+    # mio computer
+    # path_channel = 'C:/Users/giuli/Documents/Università/Traineeship/eeg-preprocessing/data/Channels - Explore_CA46.txt'
+    # computer lab
+    path_channel = 'C:/Users/Giulia Pezzutti/Documents/eeg-preprocessing/data/Channels - Explore_CA46.txt'
     channels_name = load_channel_names(path_channel)
 
+    see = False
+
     eeg = np.asmatrix(eeg)
-    eeg = eeg[500:eeg.shape[0]-500]
+    eeg = eeg[500:eeg.shape[0] - 500]
     eeg = eeg - np.mean(eeg, axis=0)
 
     for (number, channel_name) in channels_name.items():
 
-        data = butter_bandpass_filter(eeg[:, int(number)-1], lowcut=0.1, highcut=60, fs=eeg_freq, order=8)
-        eeg[:, int(number)-1] = data
+        data = butter_bandpass_filter(eeg[:, int(number) - 1], lowcut=0.1, highcut=60, fs=eeg_freq, order=8)
+        eeg[:, int(number) - 1] = data
 
-        Path('images/'+file_info['output_folder']).mkdir(parents=True, exist_ok=True)
+        Path('images/' + file_info['output_folder']).mkdir(parents=True, exist_ok=True)
 
         plt.plot(data)
         plt.title(channel_name)
@@ -123,7 +127,9 @@ if __name__ == '__main__':
         plt.ylabel('Amplitude (uV)')
         plt.tight_layout()
         plt.savefig('images/' + file_info['output_folder'] + '/' + channel_name + '_signal.jpg')
-        plt.show()
+
+        if see: plt.show()
+        plt.close()
 
         # COMPUTATION OF POWER BANDS
 
@@ -145,7 +151,7 @@ if __name__ == '__main__':
         for band in eeg_bands:
             freq_ix = np.where((fft_freq >= eeg_bands[band][0]) &
                                (fft_freq <= eeg_bands[band][1]))[0]
-            eeg_band_fft[band] = np.mean(fft_vals[freq_ix]) # qui mettere power se si vuole vedere PSD e non magnitude
+            eeg_band_fft[band] = np.mean(fft_vals[freq_ix])  # qui mettere power se si vuole vedere PSD e non magnitude
 
         df = pd.DataFrame(columns=['band', 'val'])
         df['band'] = eeg_bands.keys()
@@ -156,4 +162,15 @@ if __name__ == '__main__':
         plt.title(channel_name)
         plt.tight_layout()
         plt.savefig('images/' + file_info['output_folder'] + '/' + channel_name + '_bands_power.jpg')
-        plt.show()
+
+        if see: plt.show()
+        plt.close()
+
+    info = mne.create_info(list(channels_name.values()), eeg_freq, ["eeg"] * 8)
+    raw = mne.io.RawArray(eeg.T, info)
+    mne.viz.plot_raw(raw, scalings=dict(eeg=10000e-6), duration=eeg.shape[0] / eeg_freq)
+    mne.viz.plot_raw_psd(raw)
+
+    raw.filter(l_freq=0.4, h_freq=60)
+    raw.notch_filter(freqs=50.0)
+    mne.viz.plot_raw_psd(raw)
