@@ -28,7 +28,7 @@ if __name__ == '__main__':
 
     eeg = EEGPreprocessing(path)
     eeg.create_raw()
-    eeg.visualize_raw()
+    # eeg.visualize_raw()
     eeg.filter_raw()
-    eeg.visualize_raw()
+    # eeg.visualize_raw()
     eeg.define_epochs_raw()
