@@ -4,6 +4,7 @@ from pathlib import Path
 import mne
 import numpy as np
 import pyxdf
+import sklearn
 
 
 class EEGPreprocessing:
@@ -42,7 +43,7 @@ class EEGPreprocessing:
     def get_info_from_path(self):
         """
         Getting main information from file path regarding subject, session, run ids and output folder according to the
-        standard
+        standard of LSLRecorder
         """
 
         # get name and folder of the original file
@@ -68,7 +69,7 @@ class EEGPreprocessing:
     def load_xdf(self):
         """
         Load of .xdf file from the filepath given in input to the constructor. The function automatically divides the
-        different streams in the file and extract their main information
+        different streams in the file and extract their main information, according to who data is stored with Mentalab
         """
 
         # data loading
@@ -165,9 +166,12 @@ class EEGPreprocessing:
         for idx, marker_data in enumerate(self.marker_ids[0]):
             events.append(np.array([self.marker_instants[idx] * self.eeg_fs, int(0), int(marker_data)]))
         events = np.array(events).astype(int)
+        # self.raw.add_events(events)
 
         # generation of the epochs according to the events
-        self.epochs = mne.Epochs(self.raw, events)
+        t_min = -0.2  # start of each epoch (200ms before the trigger)
+        t_max = 0.8  # end of each epoch (500ms after the trigger)
+        self.epochs = mne.Epochs(self.raw, events, tmin=t_min, tmax=t_max)
 
         if topo_plot:
             self.epochs.plot_psd_topomap()
@@ -180,3 +184,25 @@ class EEGPreprocessing:
         self.raw.set_annotations(annot_from_events)
 
         self.epochs['3'].plot_image()
+
+    def get_raw_ndarray(self):
+        """
+        Get the entire raw signal into a numpy array of dimension
+        [number of channels, number of samples]
+        """
+
+        return self.raw.get_data()
+
+    def get_epochs_ndarray(self):
+        """
+        Get the raw signal divided into epochs into a numpy array of dimension
+        [number of epochs, number of channels, number of samples]
+        """
+
+        return self.epochs.get_data()
+
+    def compute_ica(self):
+
+        ica = mne.preprocessing.ICA()
+        ica.fit(self.epochs)
+        print(ica)
