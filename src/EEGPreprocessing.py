@@ -41,7 +41,7 @@ class EEGPreprocessing:
 
     def get_info_from_path(self):
         """
-        Getting main information from file path regarding subject, session, run and output folder according to the
+        Getting main information from file path regarding subject, session, run ids and output folder according to the
         standard
         """
 
