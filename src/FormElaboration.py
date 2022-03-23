@@ -96,7 +96,6 @@ if __name__ == '__main__':
         participants_results.loc[df.shape[0]] = results
 
     # saving of the results regarding the form
-    print(participants_results)
     participants_results.to_csv('../data/form-results/form_results.csv')
 
     # COMPUTATION OF ANALYSIS FOR ONLINE IMAGE EVALUATION
