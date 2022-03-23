@@ -71,7 +71,7 @@ if __name__ == '__main__':
         data = df.loc[df['INSERT YOUR PARTECIPANT CODE'] == code]
 
         # extraction of the data in the columns of interest
-        results = list(df[columns].values[0])
+        results = list(data[columns].values[0])
         results = list(map(lambda x: str(x).lower(), results))
 
         # extraction of the columns of interest in the personality computation: all the ones that starts with 'I...'
@@ -93,7 +93,7 @@ if __name__ == '__main__':
 
         # concatenation of data of interest and saving of it inside the final dataframe
         results = results + p_results
-        participants_results.loc[df.shape[0]] = results
+        participants_results.loc[participants_results.shape[0]] = results
 
     # saving of the results regarding the form
     participants_results.to_csv('../data/form-results/form_results.csv')
