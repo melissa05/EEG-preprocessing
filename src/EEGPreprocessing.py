@@ -25,8 +25,9 @@ class EEGPreprocessing:
         self.load_channels()
 
         self.eeg_signal = np.asmatrix(self.eeg_signal)
-        self.eeg_signal = self.eeg_signal[500:self.eeg_signal.shape[0] - 500]
-        self.eeg_instants = self.eeg_instants[500:self.eeg_instants.shape[0] - 500]
+
+        self.eeg_signal = self.eeg_signal[removed_samples:self.eeg_signal.shape[0] - removed_samples]
+        self.eeg_instants = self.eeg_instants[removed_samples:self.eeg_instants.shape[0] - removed_samples]
 
         self.eeg_signal = self.eeg_signal - np.mean(self.eeg_signal, axis=0)
 
@@ -127,17 +128,25 @@ class EEGPreprocessing:
         standard_montage = mne.channels.make_standard_montage('standard_1020')
         self.raw.set_montage(standard_montage)
 
-    def filter_raw(self, l_freq=1, h_freq=60, n_freq=50):
+    def filter_raw(self, l_freq=1, h_freq=60, n_freq=50, order=8):
         """
         Filter of MNE raw instance data with a band-pass filter and a notch filter
         :param l_freq: low frequency of band-pass filter
         :param h_freq: high frequency of band-pass filter
         :param n_freq: frequency of notch filter
+        :param order:
         """
 
+        iir_params = dict(order=order, ftype='butter')
+        iir_params = mne.filter.construct_iir_filter(iir_params=iir_params, f_pass=[l_freq, h_freq],
+                                                     sfreq=self.eeg_fs, btype='bandpass', return_copy=False, verbose=40)
+
         self.raw.filter(l_freq=l_freq, h_freq=h_freq, filter_length=self.length,
-                        l_trans_bandwidth=1, h_trans_bandwidth=1)
-        self.raw.notch_filter(freqs=n_freq)
+                        # l_trans_bandwidth=0.1, h_trans_bandwidth=0.1,
+                        method='iir', iir_params=iir_params, verbose=40)
+
+        if n_freq is not None:
+            self.raw.notch_filter(freqs=n_freq, verbose=40)
 
     def visualize_raw(self, signal=True, psd=True, psd_topo=True):
         """
@@ -201,8 +210,5 @@ class EEGPreprocessing:
 
         return self.epochs.get_data()
 
-    def compute_ica(self):
-
-        ica = mne.preprocessing.ICA()
-        ica.fit(self.epochs)
-        print(ica)
+    def __get_eeg_fs__(self):
+        return self.eeg_fs

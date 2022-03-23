@@ -33,4 +33,3 @@ if __name__ == '__main__':
     # eeg.visualize_raw()
     eeg.define_epochs_raw()
     eeg.visualize_raw()
-    eeg.compute_ica()
