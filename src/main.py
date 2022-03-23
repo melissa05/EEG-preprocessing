@@ -21,9 +21,9 @@ if __name__ == '__main__':
 
     # path = get_path()
 
-    path = 'C:/Users/Giulia Pezzutti/Documents/eeg-preprocessing/data/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task' \
+    path = 'C:/Users/Giulia Pezzutti/Documents/data-preprocessing/data/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task' \
            '-Default_run-003_eeg.xdf '
-    # path = 'C:/Users/giuli/Documents/Università/Traineeship/eeg-preprocessing/data/sub-P001/ses-S001/eeg/' \
+    # path = 'C:/Users/giuli/Documents/Università/Traineeship/data-preprocessing/data/sub-P001/ses-S001/eeg/' \
     #        'sub-P001_ses-S001_task-Default_run-003_eeg.xdf'
 
     eeg = EEGPreprocessing(path)
