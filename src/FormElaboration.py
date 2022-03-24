@@ -5,10 +5,11 @@ import numpy as np
 import pandas as pd
 
 
-def create_personality_matrix(num_personalities, num_data):
+def create_personality_matrix(num_personalities, num_data, personality_types):
     """
     Creation of multiplication matrix and bias vector for the computation of the personality test according to the
     definition
+    :param personality_types:
     :param num_personalities: number of personalities types in the study
     :param num_data: number of data to which the subject has answered
     :return: multiplication matrix and bias vector
@@ -17,20 +18,26 @@ def create_personality_matrix(num_personalities, num_data):
     # empty personality matrix
     personality_matrix = np.zeros([num_personalities, num_data])
 
+    # where to put +1 or -1 in the personality matrix for each row
+    E = {'name': 'E', '+': [1, 11, 21, 31, 41], '-': [6, 16, 26, 36, 46]}
+    A = {'name': 'A', '+': [7, 17, 27, 37, 42, 47], '-': [2, 12, 22, 32]}
+    C = {'name': 'C', '+': [3, 13, 23, 33, 43, 48], '-': [8, 18, 28, 38]}
+    N = {'name': 'N', '+': [9, 19], '-': [4, 14, 24, 29, 34, 39, 44, 49]}
+    O = {'name': 'O', '+': [5, 15, 25, 35, 40, 45, 50], '-': [10, 20, 30]}
+
     # filling of the matrix according to the definition
-    for i in range(personality_matrix.shape[0]):
-        if (i % 2) == 0:
-            for j in range(5):
-                c = i + 10 * j
-                personality_matrix[i, c] = int(1)
-                c = i + 5 + 10 * j
-                personality_matrix[i, c] = int(-1)
-        else:
-            for j in range(5):
-                c = i + 10 * j
-                personality_matrix[i, c] = int(-1)
-                c = i + 5 + 10 * j
-                personality_matrix[i, c] = int(+1)
+    for dict in [E, A, C, N, O]:
+
+        name = dict['name']
+        plus = dict['+']
+        minus = dict['-']
+
+        index = personality_types.index(name)
+
+        for idx in plus:
+            personality_matrix[index, idx-1] = +1
+        for idx in minus:
+            personality_matrix[index, idx-1] = -1
 
     # personality bias vector definition according to the explanation
     personality_bias = [20, 14, 14, 38, 8]
@@ -86,7 +93,7 @@ if __name__ == '__main__':
         p_data = list(int(vote[0]) for vote in p_data)
 
         # creation of the personality matrix and bias vector
-        p_matrix, p_bias = create_personality_matrix(len(p_types), len(p_data))
+        p_matrix, p_bias = create_personality_matrix(len(p_types), len(p_data), p_types)
 
         # computation for the derivation of each personality score
         p_results = list(np.array(p_matrix.dot(p_data) + p_bias, dtype='int'))
