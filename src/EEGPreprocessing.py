@@ -5,12 +5,14 @@ import mne
 import numpy as np
 import pyxdf
 import sklearn
+import pandas as pd
 
 
 class EEGPreprocessing:
 
     # noinspection PyTypeChecker,PyUnresolvedReferences
-    def __init__(self, path, removed_samples=500):
+    def __init__(self, path, removed_samples=0):
+
         self.data_path = path
 
         self.file_info = {}
@@ -18,11 +20,10 @@ class EEGPreprocessing:
 
         self.eeg_signal, self.eeg_instants, self.eeg_fs = None, None, None
         self.marker_ids, self.marker_instants = None, None
+        self.channels_names = {}
+        self.channels_types = {}
 
         self.load_xdf()
-
-        self.channels_names = {}
-        self.load_channels()
 
         self.eeg_signal = np.asmatrix(self.eeg_signal)
 
@@ -36,8 +37,7 @@ class EEGPreprocessing:
 
         self.length = self.eeg_instants.shape[0]
 
-        Path(self.file_info['general_data_folder'] + 'images/' + self.file_info['output_folder']).mkdir(parents=True,
-                                                                                                        exist_ok=True)
+        Path(self.file_info['folder'] + 'images/' + self.file_info['output_folder']).mkdir(parents=True, exist_ok=True)
 
         self.info, self.raw, self.epochs = None, None, None
 
@@ -47,25 +47,20 @@ class EEGPreprocessing:
         standard of LSLRecorder
         """
 
-        # get name and folder of the original file
-        base = os.path.dirname(self.data_path)
-        folder = base.split('data/')[1]
+        # get name of the original file
         base = os.path.basename(self.data_path)
         file_name = os.path.splitext(base)[0]
 
         # main folder in which data is contained
-        general_data_folder = os.path.dirname(self.data_path).split('data/')[0]
+        folder = os.path.dirname(self.data_path).split('data/')[0]
 
         # extraction of subject, session and run indexes
-        subject = (file_name.split('sub-')[1]).split('_')[0]
-        session = (file_name.split('ses-')[1]).split('_')[0]
-        run = 'R' + (file_name.split('run-')[1]).split('_')[0]
+        subject = (file_name.split('subj_')[1]).split('_block')[0]
 
         # output folder according to the standard
-        output_folder = '/sub-' + subject + '/ses-' + session + '/run-' + run + '/'
+        output_folder = '/sub-' + subject
 
-        self.file_info = {'folder': folder, 'file_name': file_name, 'subject': subject, 'session': session, 'run': run,
-                          'general_data_folder': general_data_folder, 'output_folder': output_folder}
+        self.file_info = {'folder': folder, 'file_name': file_name, 'subject': subject, 'output_folder': output_folder}
 
     def load_xdf(self):
         """
@@ -73,68 +68,69 @@ class EEGPreprocessing:
         different streams in the file and extract their main information, according to who data is stored with Mentalab
         """
 
+        stream_names = {'Markers': 'BrainVision RDA Markers', 'EEG': 'BrainVision RDA', 'Triggers': 'PsychoPy'}
+
         # data loading
-        dat = pyxdf.load_xdf(self.data_path)
+        dat = pyxdf.load_xdf(self.data_path)[0]
 
         # data iteration to extract the main information
-        for i in range(len(dat[0])):
-            stream_name = dat[0][i]['info']['name']
+        for i in range(len(dat)):
+            stream_name = dat[i]['info']['name'][0]
 
-            if stream_name == ['Explore_CA46_ORN']:
-                orn_signal = dat[0][i]['time_series']
-            if stream_name == ['Explore_CA46_ExG']:
-                self.eeg_signal = dat[0][i]['time_series']
-                self.eeg_instants = dat[0][i]['time_stamps']
-                self.eeg_fs = int(dat[0][i]['info']['nominal_srate'][0])
-            if stream_name == ['Explore_CA46_Marker']:
-                self.marker_ids = dat[0][i]['time_series']
-                self.marker_instants = dat[0][i]['time_stamps']
+            # if stream_name == stream_names['Markers']:
+            #     orn_signal = dat[i]['time_series']
 
-    def load_channels(self):
+            if stream_name == stream_names['EEG']:
+                self.eeg_signal = dat[i]['time_series'][:, :32]
+                self.eeg_signal = self.eeg_signal * 1e-6
+                self.eeg_instants = dat[i]['time_stamps']
+                self.eeg_fs = int(float(dat[i]['info']['nominal_srate'][0]))
+                self.load_channels(dat[i]['info']['desc'][0]["channels"][0]['channel'])
+
+            if stream_name == stream_names['Triggers']:
+                self.marker_ids = dat[i]['time_series']
+                self.marker_instants = dat[i]['time_stamps']
+
+    def load_channels(self, dict_channels):
         """
         Upload channels name from a file, contained in data file, reporting the number (from 1 to 8 for Explore_CA46),
         a dash and the corresponding channel name
         """
 
-        # get the file path
-        base = os.path.dirname(self.data_path)
-        path = base.split('data/')[0] + 'data/Channels - Explore_CA46.txt'
+        # x = data[0][0]['info']['desc'][0]["channels"][0]['channel']
+        # si ottiene cosi' la list adi defaultdict con i canali
 
-        # open the file
-        with open(path) as f:
-            lines = f.readlines()
+        for idx, info in enumerate(dict_channels):
 
-        # scan the read lines and according to the standard, extract the channel number and the name
-        dict_channels_name = {}
-        for line in lines:
-            s = line.replace(' ', '')
-            s = s.replace('\n', '')
+            if info['label'][0].find('dir') != -1 or info['label'][0] == 'MkIdx':
+                continue
 
-            channel_number, channel_name = s.split('-')
-            if channel_name != 'GND':
-                dict_channels_name[channel_number] = channel_name
+            self.channels_names[idx] = info['label'][0]
 
-        self.channels_names = dict_channels_name
+            if self.channels_names[idx] == 'FP2':
+                self.channels_names[idx] = 'Fp2'
+
+            self.channels_types[idx] = 'eog' if info['label'][0].find('EOG') != -1 else 'eeg'
 
     def create_raw(self):
         """
         Creation of MNE raw instance from the data, setting the general information and the relative montage
         """
 
-        self.info = mne.create_info(list(self.channels_names.values()), self.eeg_fs, ["eeg"] * 8)
+        self.info = mne.create_info(list(self.channels_names.values()), self.eeg_fs, list(self.channels_types.values()))
         self.raw = mne.io.RawArray(self.eeg_signal.T, self.info)
 
         # montage setting
         standard_montage = mne.channels.make_standard_montage('standard_1020')
         self.raw.set_montage(standard_montage)
 
-    def filter_raw(self, l_freq=1, h_freq=60, n_freq=50, order=8):
+    def filter_raw(self, l_freq=0.5, h_freq=60, n_freq=50, order=8):
         """
         Filter of MNE raw instance data with a band-pass filter and a notch filter
         :param l_freq: low frequency of band-pass filter
         :param h_freq: high frequency of band-pass filter
         :param n_freq: frequency of notch filter
-        :param order:
+        :param order: order of the filter
         """
 
         iir_params = dict(order=order, ftype='butter')
@@ -142,7 +138,7 @@ class EEGPreprocessing:
                                                      sfreq=self.eeg_fs, btype='bandpass', return_copy=False, verbose=40)
 
         self.raw.filter(l_freq=l_freq, h_freq=h_freq, filter_length=self.length,
-                        # l_trans_bandwidth=0.1, h_trans_bandwidth=0.1,
+                        l_trans_bandwidth=0.1, h_trans_bandwidth=0.1,
                         method='iir', iir_params=iir_params, verbose=40)
 
         if n_freq is not None:
@@ -156,12 +152,22 @@ class EEGPreprocessing:
         :param psd_topo: boolean, if the topographic psd plot should be generated
         """
 
+        viz_scalings = dict(eeg=1e-5, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
+
         if signal:
-            mne.viz.plot_raw(self.raw, scalings=dict(eeg=1e2), duration=self.length / self.eeg_fs)
+            mne.viz.plot_raw(self.raw, scalings=viz_scalings, duration=self.length / self.eeg_fs)
         if psd:
             self.raw.plot_psd()
         if psd_topo:
             self.raw.plot_psd_topo()
+
+    def set_reference(self, type='average'):
+        """
+        Resetting the reference in raw data
+        :param type: type of referencing to be performed
+        """
+
+        mne.set_eeg_reference(self.raw, ref_channels=type, copy=False)
 
     def define_epochs_raw(self, topo_plot=True):
         """
@@ -171,11 +177,16 @@ class EEGPreprocessing:
         """
 
         # generation of the events according to the definition
-        events = []
-        for idx, marker_data in enumerate(self.marker_ids[0]):
-            events.append(np.array([self.marker_instants[idx] * self.eeg_fs, int(0), int(marker_data)]))
-        events = np.array(events).astype(int)
-        # self.raw.add_events(events)
+        triggers = {'onsets': [], 'duration': [], 'description': []}
+        for idx, marker_data in enumerate(self.marker_ids):
+            triggers['onsets'].append(self.marker_instants[idx])
+            triggers['duration'].append(int(0))
+            triggers['description'].append(marker_data[0])
+
+        annotations = mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description'])
+        self.raw.set_annotations(annotations)
+
+        events, event_mapping = mne.events_from_annotations(self.raw)
 
         # generation of the epochs according to the events
         t_min = -0.2  # start of each epoch (200ms before the trigger)
@@ -185,14 +196,7 @@ class EEGPreprocessing:
         if topo_plot:
             self.epochs.plot_psd_topomap()
 
-        # annotation of raw data
-        mapping = {1: 'auditory/left', 2: 'auditory/right', 3: 'visual/left', 4: 'visual/right', 5: 'smiley',
-                   32: 'buttonpress'}
-        annot_from_events = mne.annotations_from_events(events=events, event_desc=mapping, sfreq=self.raw.info['sfreq'],
-                                                        orig_time=self.raw.info['meas_date'])
-        self.raw.set_annotations(annot_from_events)
-
-        self.epochs['3'].plot_image()
+        self.epochs.plot_image()
 
     def get_raw_ndarray(self):
         """

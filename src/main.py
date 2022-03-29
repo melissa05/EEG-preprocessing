@@ -21,15 +21,13 @@ if __name__ == '__main__':
 
     # path = get_path()
 
-    path = 'C:/Users/Giulia Pezzutti/Documents/data-preprocessing/data/sub-P001/ses-S001/eeg/sub-P001_ses-S001_task' \
-           '-Default_run-003_eeg.xdf '
-    # path = 'C:/Users/giuli/Documents/Università/Traineeship/data-preprocessing/data/sub-P001/ses-S001/eeg/' \
-    #        'sub-P001_ses-S001_task-Default_run-003_eeg.xdf'
+    path = 'C:/Users/Giulia Pezzutti/Documents/data-preprocessing/data/subj_1_block1.xdf'
 
     eeg = EEGPreprocessing(path)
     eeg.create_raw()
     # eeg.visualize_raw()
     eeg.filter_raw()
+    eeg.set_reference()
     # eeg.visualize_raw()
     eeg.define_epochs_raw()
-    eeg.visualize_raw()
+    # eeg.visualize_raw()

@@ -58,7 +58,7 @@ if __name__ == '__main__':
     cols = list(df.columns)
 
     # determination of the columns of interest (demographic information) and removal of non-interesting parts
-    columns = df.columns[1:5]
+    columns = df.columns[1:6]
     columns_list = list(columns)
     for idx, name in enumerate(columns_list):
         name = name.lower()
