@@ -29,7 +29,6 @@ class EEGPreprocessing:
 
         self.eeg_signal = self.eeg_signal[removed_samples:self.eeg_signal.shape[0] - removed_samples]
         self.eeg_instants = self.eeg_instants[removed_samples:self.eeg_instants.shape[0] - removed_samples]
-
         self.eeg_signal = self.eeg_signal - np.mean(self.eeg_signal, axis=0)
 
         self.marker_instants -= self.eeg_instants[0]
@@ -39,7 +38,7 @@ class EEGPreprocessing:
 
         Path(self.file_info['folder'] + 'images/' + self.file_info['output_folder']).mkdir(parents=True, exist_ok=True)
 
-        self.info, self.raw, self.epochs = None, None, None
+        self.info, self.raw, self.events, self.event_mapping, self.epochs, self.annotations = None, None, None, None, None, None
 
     def get_info_from_path(self):
         """
@@ -98,7 +97,7 @@ class EEGPreprocessing:
         """
 
         # x = data[0][0]['info']['desc'][0]["channels"][0]['channel']
-        # si ottiene cosi' la list adi defaultdict con i canali
+        # to obtain the default-dict list of the channels from the original file (data, not dat!!)
 
         for idx, info in enumerate(dict_channels):
 
@@ -155,48 +154,102 @@ class EEGPreprocessing:
         viz_scalings = dict(eeg=1e-5, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
 
         if signal:
-            mne.viz.plot_raw(self.raw, scalings=viz_scalings, duration=self.length / self.eeg_fs)
+            mne.viz.plot_raw(self.raw, scalings=viz_scalings, duration=50)
         if psd:
             self.raw.plot_psd()
         if psd_topo:
             self.raw.plot_psd_topo()
 
-    def set_reference(self, type='average'):
+    def set_reference(self, ref_type='average'):
         """
         Resetting the reference in raw data
-        :param type: type of referencing to be performed
+        :param ref_type: type of referencing to be performed
         """
 
-        mne.set_eeg_reference(self.raw, ref_channels=type, copy=False)
+        mne.set_eeg_reference(self.raw, ref_channels=ref_type, copy=False)
 
-    def define_epochs_raw(self, topo_plot=True):
+    def define_epochs_raw(self, only_manipulation=True, rois=True):
         """
         Function to extract events from the marker data, generate the correspondent epochs and determine annotation in
         the raw data according to the events
-        :param topo_plot: boolean, if the topographic plot should be generated
+        :param rois:
+        :param only_manipulation:
         """
 
         # generation of the events according to the definition
         triggers = {'onsets': [], 'duration': [], 'description': []}
         for idx, marker_data in enumerate(self.marker_ids):
+
+            if marker_data[0] == 'intro' or marker_data[0] == 'end':
+                continue
+
             triggers['onsets'].append(self.marker_instants[idx])
             triggers['duration'].append(int(0))
-            triggers['description'].append(marker_data[0])
 
-        annotations = mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description'])
-        self.raw.set_annotations(annotations)
+            if only_manipulation:
+                manipulation = marker_data[0].split('/')[-1]
+                triggers['description'].append(manipulation)
+            else:
+                triggers['description'].append(marker_data[0])
 
-        events, event_mapping = mne.events_from_annotations(self.raw)
+        self.annotations = mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description'])
+        self.raw.set_annotations(self.annotations)
+
+        self.events, self.event_mapping = mne.events_from_annotations(self.raw)
 
         # generation of the epochs according to the events
+
         t_min = -0.2  # start of each epoch (200ms before the trigger)
         t_max = 0.8  # end of each epoch (500ms after the trigger)
-        self.epochs = mne.Epochs(self.raw, events, tmin=t_min, tmax=t_max)
+
+        # Automatic rejection criteria: reject epochs based on maximum peak-to-peak signal amplitude (PTP)
+        reject_criteria = dict(eeg=80e-6,  # 200 µV
+                               eog=1e-3)  # 1 mV
+
+        self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping,
+                                 tmin=t_min, tmax=t_max, reject=reject_criteria)
+
+        self.visualize_epochs()
+
+    def visualize_epochs(self, signal=True, topo_plot=True, conditional_epoch=True, rois=True):
+        """
+        :param signal:
+        :param topo_plot: boolean, if the topographic plot should be generated
+        :param conditional_epoch:
+        :param rois:
+        """
+
+        self.visualize_raw(signal=signal, psd=False, psd_topo=False)
 
         if topo_plot:
             self.epochs.plot_psd_topomap()
 
-        self.epochs.plot_image()
+        if conditional_epoch:
+            if rois:
+                rois_numbers = self.define_rois()
+                for condition in self.event_mapping.keys():
+                    self.epochs[condition].plot_image(group_by=rois_numbers)
+            else:
+                for condition in self.event_mapping.keys():
+                    self.epochs[condition].plot_image()
+
+    def define_rois(self):
+
+        rois = dict(
+            central=["Cz", "C3", "C4"],
+            frontal=["Fz", "Fp1", "F3", "F7", "FC1", "FC2", "F4", "F8", "Fp2"],
+            occipital_parietal=["O1", "Oz", "O2", "Pz", "P3", "P7", "P4", "P8"],
+            temporal=["FC6", "FC5", "T7", "T8", "CP5", "CP6", "FT9", "FT10", "TP9", "TP10"],
+        )
+
+        rois_numbers = dict(
+            central=np.array([self.raw.ch_names.index(i) for i in rois['central']]),
+            frontal=np.array([self.raw.ch_names.index(i) for i in rois['frontal']]),
+            occipital_parietal=np.array([self.raw.ch_names.index(i) for i in rois['occipital_parietal']]),
+            temporal=np.array([self.raw.ch_names.index(i) for i in rois['temporal']]),
+        )
+
+        return rois_numbers
 
     def get_raw_ndarray(self):
         """
