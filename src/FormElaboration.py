@@ -1,6 +1,7 @@
 import glob
 import re
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -34,10 +35,10 @@ def create_personality_matrix(num_personalities, num_data, personality_types):
 
         index = personality_types.index(name)
 
-        for idx in plus:
-            personality_matrix[index, idx-1] = +1
-        for idx in minus:
-            personality_matrix[index, idx-1] = -1
+        for id in plus:
+            personality_matrix[index, id-1] = +1
+        for id in minus:
+            personality_matrix[index, id-1] = -1
 
     # personality bias vector definition according to the explanation
     personality_bias = [20, 14, 14, 38, 8]
@@ -138,7 +139,49 @@ if __name__ == '__main__':
         # extraction of the columns of interest and subsequent saving
         data = df[columns]
         data.insert(0, participant_code, code)
+
+        means = data.loc[:, ['vm', 'am']]
+        new_ratings = data.loc[:, ['valence_slider.response', 'arousal_slider.response']]
+        labels, valence_difference, arousal_difference = [], [], []
+        threshold = 0.1
+
+        for index, row in means.iterrows():
+            valence = row['vm']
+            arousal = row['am']
+
+            if (np.square(valence) + np.square(arousal)) <= np.square(threshold):
+                labels.append('Neutral')
+            elif valence > 0 and arousal > 0:
+                labels.append('HVHA')
+            elif valence > 0 and arousal <= 0:
+                labels.append('HVLA')
+            elif valence <= 0 and arousal > 0:
+                labels.append('LVHA')
+            elif valence <= 0 and arousal <= 0:
+                labels.append('LVLA')
+
+            new_valence = new_ratings.loc[index, 'valence_slider.response']
+            new_arousal = new_ratings.loc[index, 'arousal_slider.response']
+
+            valence_difference.append(valence-new_valence)
+            arousal_difference.append(arousal-new_arousal)
+
+        data.insert(data.shape[1], 'label', labels, True)
+        data.insert(data.shape[1], 'valence_difference', valence_difference, True)
+        data.insert(data.shape[1], 'arousal_difference', arousal_difference, True)
+
         responses = pd.concat([responses, data])
 
     # saving of the csv file containing all the
     responses.to_csv('../data/ratings-results/ratings-results.csv')
+
+    # to visually check normality for statistical tests
+    valence_difference = responses.loc[:, 'valence_difference']
+    plt.hist(valence_difference)
+    plt.title('valence difference')
+    plt.show()
+
+    arousal_difference = responses.loc[:, 'arousal_difference']
+    plt.hist(arousal_difference)
+    plt.title('arousal difference')
+    plt.show()

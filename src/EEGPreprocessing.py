@@ -42,8 +42,8 @@ class EEGPreprocessing:
 
     def get_info_from_path(self):
         """
-        Getting main information from file path regarding subject, session, run ids and output folder according to the
-        standard of LSLRecorder
+        Getting main information from file path regarding subject, folder and output folder according to
+        LSLRecorder standard
         """
 
         # get name of the original file
@@ -64,7 +64,7 @@ class EEGPreprocessing:
     def load_xdf(self):
         """
         Load of .xdf file from the filepath given in input to the constructor. The function automatically divides the
-        different streams in the file and extract their main information, according to who data is stored with Mentalab
+        different streams in the file and extract their main information
         """
 
         stream_names = {'Markers': 'BrainVision RDA Markers', 'EEG': 'BrainVision RDA', 'Triggers': 'PsychoPy'}
@@ -92,8 +92,7 @@ class EEGPreprocessing:
 
     def load_channels(self, dict_channels):
         """
-        Upload channels name from a file, contained in data file, reporting the number (from 1 to 8 for Explore_CA46),
-        a dash and the corresponding channel name
+        Upload channels name from a xdf file
         """
 
         # x = data[0][0]['info']['desc'][0]["channels"][0]['channel']
@@ -145,7 +144,7 @@ class EEGPreprocessing:
 
     def visualize_raw(self, signal=True, psd=True, psd_topo=True):
         """
-        Visualization of the plots that could be generated with MNE
+        Visualization of the plots that could be generated with MNE according to a scaling property
         :param signal: boolean, if the signal plot should be generated
         :param psd: boolean, if the psd plot should be generated
         :param psd_topo: boolean, if the topographic psd plot should be generated
@@ -172,8 +171,9 @@ class EEGPreprocessing:
         """
         Function to extract events from the marker data, generate the correspondent epochs and determine annotation in
         the raw data according to the events
-        :param rois:
-        :param only_manipulation:
+        :param only_manipulation: boolean variable to select to manipulate epochs only according to the image
+        manipulation type or according to the whole trigger (img_name/manipulation)
+        :param rois: boolean variable to select if visualize results in terms to rois or not
         """
 
         # generation of the events according to the definition
@@ -209,14 +209,14 @@ class EEGPreprocessing:
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping,
                                  tmin=t_min, tmax=t_max, reject=reject_criteria)
 
-        self.visualize_epochs()
+        self.visualize_epochs(signal=True, topo_plot=False, conditional_epoch=True, rois=rois)
 
     def visualize_epochs(self, signal=True, topo_plot=True, conditional_epoch=True, rois=True):
         """
-        :param signal:
+        :param signal: boolean, if visualize the whole signal with triggers or not
         :param topo_plot: boolean, if the topographic plot should be generated
-        :param conditional_epoch:
-        :param rois:
+        :param conditional_epoch: boolean, if visualize the epochs extracted from the events
+        :param rois: boolean (only if conditional_epoch=True), if visualize the epochs according to the rois or not
         """
 
         self.visualize_raw(signal=signal, psd=False, psd_topo=False)

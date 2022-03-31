@@ -21,7 +21,7 @@ if __name__ == '__main__':
 
     # path = get_path()
 
-    path = 'C:/Users/Giulia Pezzutti/Documents/data-preprocessing/data/subj_1_block1.xdf'
+    path = './../data/subj_1_block1.xdf'
 
     eeg = EEGPreprocessing(path)
     eeg.create_raw()
