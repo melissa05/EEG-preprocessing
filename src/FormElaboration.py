@@ -104,11 +104,9 @@ if __name__ == '__main__':
         participants_results.loc[participants_results.shape[0]] = results
 
     # saving of the results regarding the form
-    participants_results.to_csv('../data/form-results/form_results.csv')
+    participants_results.to_csv('../data/form-results/form-results.csv')
 
     # COMPUTATION OF ANALYSIS FOR ONLINE IMAGE EVALUATION
-
-    codes = ['1']
 
     # path to the folder containing the csv files results
     rating_path = '../data/ratings-results/'

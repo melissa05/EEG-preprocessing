@@ -4,11 +4,10 @@ from pathlib import Path
 import mne
 import numpy as np
 import pyxdf
-import sklearn
 import pandas as pd
 
 
-class EEGPreprocessing:
+class EEGAnalysis:
 
     # noinspection PyTypeChecker,PyUnresolvedReferences
     def __init__(self, path, removed_samples=0):
@@ -36,8 +35,6 @@ class EEGPreprocessing:
 
         self.length = self.eeg_instants.shape[0]
 
-        Path(self.file_info['folder'] + 'images/' + self.file_info['output_folder']).mkdir(parents=True, exist_ok=True)
-
         self.info, self.raw, self.events, self.event_mapping, self.epochs, self.annotations = None, None, None, None, None, None
 
     def get_info_from_path(self):
@@ -51,7 +48,9 @@ class EEGPreprocessing:
         file_name = os.path.splitext(base)[0]
 
         # main folder in which data is contained
-        folder = os.path.dirname(self.data_path).split('data/')[0]
+        base = os.path.abspath(self.data_path)
+        folder = os.path.dirname(base).split('data/')[0]
+        folder = folder.replace('\\', '/')
 
         # extraction of subject, session and run indexes
         subject = (file_name.split('subj_')[1]).split('_block')[0]
@@ -60,6 +59,9 @@ class EEGPreprocessing:
         output_folder = '/sub-' + subject
 
         self.file_info = {'folder': folder, 'file_name': file_name, 'subject': subject, 'output_folder': output_folder}
+
+        output_folder = folder.rsplit('/', 2)[0]
+        Path(output_folder + '/images/' + self.file_info['output_folder']).mkdir(parents=True, exist_ok=True)
 
     def load_xdf(self):
         """
@@ -167,10 +169,11 @@ class EEGPreprocessing:
 
         mne.set_eeg_reference(self.raw, ref_channels=ref_type, copy=False)
 
-    def define_epochs_raw(self, only_manipulation=True, rois=True):
+    def define_epochs_raw(self, visualize=True, only_manipulation=True, rois=True):
         """
         Function to extract events from the marker data, generate the correspondent epochs and determine annotation in
         the raw data according to the events
+        :param visualize:
         :param only_manipulation: boolean variable to select to manipulate epochs only according to the image
         manipulation type or according to the whole trigger (img_name/manipulation)
         :param rois: boolean variable to select if visualize results in terms to rois or not
@@ -209,7 +212,8 @@ class EEGPreprocessing:
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping,
                                  tmin=t_min, tmax=t_max, reject=reject_criteria)
 
-        self.visualize_epochs(signal=True, topo_plot=False, conditional_epoch=True, rois=rois)
+        if visualize:
+            self.visualize_epochs(signal=True, topo_plot=False, conditional_epoch=True, rois=rois)
 
     def visualize_epochs(self, signal=True, topo_plot=True, conditional_epoch=True, rois=True):
         """
@@ -266,6 +270,10 @@ class EEGPreprocessing:
         """
 
         return self.epochs.get_data()
+
+    def get_epochs_dataframe(self):
+
+        return self.epochs.to_data_frame()
 
     def __get_eeg_fs__(self):
         return self.eeg_fs

@@ -1,7 +1,7 @@
 import os
 import sys
 import tkinter
-from EEGPreprocessing import *
+from EEGAnalysis import *
 
 
 def get_path():
@@ -20,10 +20,9 @@ def get_path():
 if __name__ == '__main__':
 
     # path = get_path()
+    path = '../data/eeg/subj_1_block1.xdf'
 
-    path = './../data/subj_1_block1.xdf'
-
-    eeg = EEGPreprocessing(path)
+    eeg = EEGAnalysis(path)
     eeg.create_raw()
     # eeg.visualize_raw()
     eeg.filter_raw()
