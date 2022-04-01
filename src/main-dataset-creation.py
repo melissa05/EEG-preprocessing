@@ -1,7 +1,6 @@
-import pandas as pd
 from os.path import exists
 
-from scipy.io import savemat
+import pandas as pd
 
 from EEGAnalysis import *
 

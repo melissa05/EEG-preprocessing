@@ -28,6 +28,4 @@ if __name__ == '__main__':
     eeg.filter_raw()
     eeg.set_reference()
     # eeg.visualize_raw()
-    eeg.define_epochs_raw()
-    # eeg.visualize_raw()
-    # eeg.define_rois()
+    eeg.define_epochs_raw(visualize=False)

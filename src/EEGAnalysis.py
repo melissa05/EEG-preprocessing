@@ -4,7 +4,6 @@ from pathlib import Path
 import mne
 import numpy as np
 import pyxdf
-import pandas as pd
 
 
 class EEGAnalysis:
@@ -152,10 +151,10 @@ class EEGAnalysis:
         :param psd_topo: boolean, if the topographic psd plot should be generated
         """
 
-        viz_scalings = dict(eeg=1e-5, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
+        viz_scaling = dict(eeg=1e-5, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
 
         if signal:
-            mne.viz.plot_raw(self.raw, scalings=viz_scalings, duration=50)
+            mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=50)
         if psd:
             self.raw.plot_psd()
         if psd_topo:
