@@ -50,6 +50,7 @@ if __name__ == '__main__':
 
     # unique filepath for the form results file
     filepath = '../data/form-results/Form results - Risposte del modulo 1.csv'
+    output_folder = '../data/form-results/'
 
     # reading of the file
     df = pd.read_csv(filepath)
@@ -104,7 +105,7 @@ if __name__ == '__main__':
         participants_results.loc[participants_results.shape[0]] = results
 
     # saving of the results regarding the form
-    participants_results.to_csv('../data/form-results/form-results.csv')
+    participants_results.to_csv(output_folder+'/form-results.csv')
 
     # COMPUTATION OF ANALYSIS FOR ONLINE IMAGE EVALUATION
 
@@ -173,15 +174,17 @@ if __name__ == '__main__':
 
     # saving of the csv file containing all the data
     responses = responses.rename(columns={'valence_slider.response': 'valence', 'arousal_slider.response': 'arousal'})
-    responses.to_csv('../data/ratings-results/ratings-results.csv')
+    responses.to_csv(rating_path+'/ratings-results.csv')
 
     # to visually check normality for statistical tests
     valence_difference = responses.loc[:, 'valence_diff']
     plt.hist(valence_difference)
-    plt.title('valence difference')
+    plt.title('Valence difference')
     plt.show()
+    plt.savefig(rating_path+'/distribution_valence_difference.jpg')
 
     arousal_difference = responses.loc[:, 'arousal_diff']
     plt.hist(arousal_difference)
-    plt.title('arousal difference')
+    plt.title('Arousal difference')
     plt.show()
+    plt.savefig(rating_path+'/distribution_arousal_difference.jpg')
