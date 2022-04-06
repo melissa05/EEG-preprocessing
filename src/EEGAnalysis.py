@@ -202,10 +202,10 @@ class EEGAnalysis:
         # generation of the epochs according to the events
 
         t_min = -0.2  # start of each epoch (200ms before the trigger)
-        t_max = 0.8  # end of each epoch (500ms after the trigger)
+        t_max = 0.8  # end of each epoch (800ms after the trigger)
 
         # Automatic rejection criteria: reject epochs based on maximum peak-to-peak signal amplitude (PTP)
-        reject_criteria = dict(eeg=80e-6,  # 200 µV
+        reject_criteria = dict(eeg=200e-6,  # 200 µV
                                eog=1e-3)  # 1 mV
 
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping,

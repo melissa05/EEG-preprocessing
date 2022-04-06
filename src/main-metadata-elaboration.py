@@ -55,7 +55,7 @@ if __name__ == '__main__':
     df = pd.read_csv(filepath)
 
     # extraction of the participant codes and columns names
-    codes = df.iloc[:]['INSERT YOUR PARTECIPANT CODE'].tolist()
+    codes = df.iloc[:]['INSERT YOUR PARTICIPANT CODE'].tolist()
     cols = list(df.columns)
 
     # determination of the columns of interest (demographic information) and removal of non-interesting parts
@@ -76,7 +76,7 @@ if __name__ == '__main__':
     for code in codes:
 
         # extraction data corresponding to the participant of interest
-        data = df.loc[df['INSERT YOUR PARTECIPANT CODE'] == code]
+        data = df.loc[df['INSERT YOUR PARTICIPANT CODE'] == code]
 
         # extraction of the data in the columns of interest
         results = list(data[columns].values[0])
@@ -114,7 +114,7 @@ if __name__ == '__main__':
 
     # definition of the columns of interest, for the input file (columns) and for the output file (new_columns)
     columns = list(['img_name', 'manipulation', 'vm', 'am', 'valence_slider.response', 'arousal_slider.response'])
-    participant_code = 'partecipant_code'
+    participant_code = 'participant code'
     new_columns = [participant_code] + columns
 
     # creation of results dataframe
@@ -136,6 +136,7 @@ if __name__ == '__main__':
 
         # extraction of the columns of interest and subsequent saving
         data = df[columns]
+        data = data.round({'valence_slider.response': 0, 'arousal_slider.response': 0})
         data.insert(0, participant_code, code)
 
         means = data.loc[:, ['vm', 'am']]
@@ -165,21 +166,22 @@ if __name__ == '__main__':
             arousal_difference.append(arousal-new_arousal)
 
         data.insert(data.shape[1], 'label', labels, True)
-        data.insert(data.shape[1], 'valence_difference', valence_difference, True)
-        data.insert(data.shape[1], 'arousal_difference', arousal_difference, True)
+        data.insert(data.shape[1], 'valence_diff', valence_difference, True)
+        data.insert(data.shape[1], 'arousal_diff', arousal_difference, True)
 
         responses = pd.concat([responses, data])
 
-    # saving of the csv file containing all the
+    # saving of the csv file containing all the data
+    responses = responses.rename(columns={'valence_slider.response': 'valence', 'arousal_slider.response': 'arousal'})
     responses.to_csv('../data/ratings-results/ratings-results.csv')
 
     # to visually check normality for statistical tests
-    valence_difference = responses.loc[:, 'valence_difference']
+    valence_difference = responses.loc[:, 'valence_diff']
     plt.hist(valence_difference)
     plt.title('valence difference')
     plt.show()
 
-    arousal_difference = responses.loc[:, 'arousal_difference']
+    arousal_difference = responses.loc[:, 'arousal_diff']
     plt.hist(arousal_difference)
     plt.title('arousal difference')
     plt.show()
