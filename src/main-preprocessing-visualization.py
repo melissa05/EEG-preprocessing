@@ -20,7 +20,7 @@ def get_path():
 if __name__ == '__main__':
 
     # path = get_path()
-    path = '../data/eeg/subj_1_block1.xdf'
+    path = '../data/eeg/subj_maba09_block1.xdf'
 
     eeg = EEGAnalysis(path)
     eeg.create_raw()
@@ -28,4 +28,4 @@ if __name__ == '__main__':
     eeg.filter_raw()
     eeg.set_reference()
     # eeg.visualize_raw()
-    eeg.define_epochs_raw(visualize=False)
+    eeg.define_epochs_raw(visualize=True)

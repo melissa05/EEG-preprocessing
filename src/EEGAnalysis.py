@@ -55,12 +55,12 @@ class EEGAnalysis:
         subject = (file_name.split('subj_')[1]).split('_block')[0]
 
         # output folder according to the standard
-        output_folder = '/sub-' + subject
+        output_folder = folder.rsplit('/', 2)[0] + '/images/sub-' + subject
+        Path(output_folder).mkdir(parents=True, exist_ok=True)
+        print(output_folder)
 
         self.file_info = {'folder': folder, 'file_name': file_name, 'subject': subject, 'output_folder': output_folder}
 
-        output_folder = folder.rsplit('/', 2)[0]
-        Path(output_folder + '/images/' + self.file_info['output_folder']).mkdir(parents=True, exist_ok=True)
 
     def load_xdf(self):
         """
@@ -151,7 +151,7 @@ class EEGAnalysis:
         :param psd_topo: boolean, if the topographic psd plot should be generated
         """
 
-        viz_scaling = dict(eeg=1e-5, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
+        viz_scaling = dict(eeg=1e-4, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
 
         if signal:
             mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=50)
@@ -182,7 +182,7 @@ class EEGAnalysis:
         triggers = {'onsets': [], 'duration': [], 'description': []}
         for idx, marker_data in enumerate(self.marker_ids):
 
-            if marker_data[0] == 'intro' or marker_data[0] == 'end':
+            if marker_data[0] == 'intro' or marker_data[0] == 'pause' or marker_data[0] == 'end':
                 continue
 
             triggers['onsets'].append(self.marker_instants[idx])
@@ -222,6 +222,8 @@ class EEGAnalysis:
         :param rois: boolean (only if conditional_epoch=True), if visualize the epochs according to the rois or not
         """
 
+        viz_scaling = dict(eeg=1e-4, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
+
         self.visualize_raw(signal=signal, psd=False, psd_topo=False)
 
         if topo_plot:
@@ -230,11 +232,21 @@ class EEGAnalysis:
         if conditional_epoch:
             if rois:
                 rois_numbers = self.define_rois()
+                rois_names = list(rois_numbers.keys())
+
                 for condition in self.event_mapping.keys():
-                    self.epochs[condition].plot_image(group_by=rois_numbers)
+                    imgs = self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers, scalings=viz_scaling,
+                                                             show=False)
+
+                    for idx, img in enumerate(imgs):
+                        img.savefig(self.file_info['output_folder']+'/'+condition+'_'+rois_names[idx]+'.png')
             else:
                 for condition in self.event_mapping.keys():
-                    self.epochs[condition].plot_image()
+                    self.epochs[condition].plot_image(scalings=viz_scaling, show=False)
+
+        for condition in self.event_mapping.keys():
+            img = self.epochs[condition].plot_psd_topomap(vlim='joint', show=False)
+            img.savefig(self.file_info['output_folder']+'/'+condition+'_topography.png')
 
     def define_rois(self):
 
