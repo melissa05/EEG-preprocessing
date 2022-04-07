@@ -57,10 +57,8 @@ class EEGAnalysis:
         # output folder according to the standard
         output_folder = folder.rsplit('/', 2)[0] + '/images/sub-' + subject
         Path(output_folder).mkdir(parents=True, exist_ok=True)
-        print(output_folder)
 
         self.file_info = {'folder': folder, 'file_name': file_name, 'subject': subject, 'output_folder': output_folder}
-
 
     def load_xdf(self):
         """
@@ -235,18 +233,19 @@ class EEGAnalysis:
                 rois_names = list(rois_numbers.keys())
 
                 for condition in self.event_mapping.keys():
-                    imgs = self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers, scalings=viz_scaling,
-                                                             show=False)
+                    images = self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers,
+                                                               vmin=-6e-9, vmax=6e-9,
+                                                               scalings=viz_scaling, show=False)
 
-                    for idx, img in enumerate(imgs):
-                        img.savefig(self.file_info['output_folder']+'/'+condition+'_'+rois_names[idx]+'.png')
+                    for idx, img in enumerate(images):
+                        img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + rois_names[idx] + '.png')
             else:
                 for condition in self.event_mapping.keys():
                     self.epochs[condition].plot_image(scalings=viz_scaling, show=False)
 
         for condition in self.event_mapping.keys():
-            img = self.epochs[condition].plot_psd_topomap(vlim='joint', show=False)
-            img.savefig(self.file_info['output_folder']+'/'+condition+'_topography.png')
+            img = self.epochs[condition].plot_psd_topomap(vlim=(7, 45), show=False)
+            img.savefig(self.file_info['output_folder'] + '/' + condition + '_topography.png')
 
     def define_rois(self):
 
