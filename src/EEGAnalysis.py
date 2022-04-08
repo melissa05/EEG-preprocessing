@@ -234,7 +234,7 @@ class EEGAnalysis:
 
                 for condition in self.event_mapping.keys():
                     images = self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers,
-                                                               vmin=-6e-9, vmax=6e-9,
+                                                               # vmin=-6e-9, vmax=6e-9,
                                                                scalings=viz_scaling, show=False)
 
                     for idx, img in enumerate(images):

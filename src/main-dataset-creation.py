@@ -24,12 +24,15 @@ if __name__ == '__main__':
     info_dataset, signal_dataset, label_dataset = [], [], []
 
     for code in codes_form:
+
         if code not in codes_ratings:
             continue
 
         path_signals = path_eeg+'/subj_'+code+'_block1.xdf'
         if not exists(path_signals):
             continue
+
+        print('\n\n\ncode')
 
         data_form = df_form.loc[df_form['participant code'] == code, :].values.flatten().tolist()[1:]
         data_ratings = df_ratings.loc[df_ratings['participant code'] == code]

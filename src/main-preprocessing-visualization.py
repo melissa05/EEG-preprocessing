@@ -20,7 +20,7 @@ def get_path():
 if __name__ == '__main__':
 
     # path = get_path()
-    path = '../data/eeg/subj_maba09_block1.xdf'
+    path = '../data/eeg/subj_soze31_block1.xdf'
 
     eeg = EEGAnalysis(path)
     eeg.create_raw()
