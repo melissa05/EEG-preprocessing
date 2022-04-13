@@ -4,6 +4,7 @@ from pathlib import Path
 import mne
 import numpy as np
 import pyxdf
+from matplotlib import pyplot as plt
 
 
 class EEGAnalysis:
@@ -264,6 +265,96 @@ class EEGAnalysis:
         )
 
         return rois_numbers
+
+    def plot_mean_epochs(self):
+
+        epochs = self.get_epochs_dataframe()
+        conditions = epochs.iloc[:]['condition'].tolist()
+        conditions = list(set(conditions))
+
+        x_axis = epochs.iloc[:]['time'].tolist()
+        x_axis = np.sort(np.array(list(set(x_axis))))
+        rois_numbers = self.define_rois()
+
+        means, epoch_signals = {}, {}
+
+        # questa cosa deve essere fatta su tutti i file che vengono analizzati, così da creare un pattern tra partecipanti
+        # - può essere inserito come funzione nella classe, essere ripetuto per ogni elemento della lista di dati e infine
+        # creare la matrice finale di medie
+        # HA SENSO SOLO INTRA-SOGGETTO O ANCHE INTER-SOGGETTO?
+
+        for condition in conditions:
+
+            # epochs belonging only to the current condition
+            condition_epochs = epochs.loc[epochs['condition'] == condition, :]
+
+            # number of the epochs belonging to the current condition
+            number_epochs = condition_epochs.iloc[:]['epoch'].tolist()
+            number_epochs = list(set(number_epochs))
+
+            for epoch_number in number_epochs:
+
+                # current epoch (in current condition), extracted and made as matrix: #channels x #samples
+                current_epoch = condition_epochs.loc[condition_epochs['epoch'] == epoch_number, :].values[:, 3:-2]
+                current_epoch = np.array(current_epoch).T
+
+                for roi in rois_numbers.keys():
+
+                    # signals of the current epoch and in the current roi: #channels (in ROI) x #number samples
+                    current_roi_epoch = current_epoch[rois_numbers[roi]]
+
+                    label = condition + '/' + roi
+
+                    # save in a matrix containing all signals coming from same condition and same roi
+                    if label in epoch_signals:
+                        epoch_signals[label] = np.concatenate((epoch_signals[label], current_roi_epoch))
+                    else:
+                        epoch_signals[label] = current_roi_epoch
+
+        # mean of the signals in same condition and same roi
+        for key in epoch_signals:
+            mean_current_epochs = np.mean(epoch_signals[key], axis=0)
+            means[key] = mean_current_epochs
+
+        # get minimum and maximum value of the mean signals
+        min_value, max_value = 100, -100
+        for label in epoch_signals.keys():
+            min_value = min(np.min(means[label]), min_value)
+            max_value = max(np.max(means[label]), max_value)
+
+        Path(self.file_info['output_folder'] + '/epochs/').mkdir(parents=True, exist_ok=True)
+
+        for condition in conditions:
+            correct_labels = [s for s in epoch_signals.keys() if condition + '/' in s]
+            correct_short_labels = [s.split('/')[1] for s in correct_labels]
+
+            for idx, label in enumerate(correct_labels):
+                plt.plot(x_axis, means[label], label=correct_short_labels[idx])
+
+            plt.vlines(170, ymin=min_value, ymax=max_value)
+
+            path = self.file_info['output_folder'] + '/epochs/' + condition + '.png'
+            plt.title(condition)
+            plt.legend()
+            plt.savefig(path)
+            plt.close()
+
+        for roi in rois_numbers.keys():
+            correct_labels = [s for s in epoch_signals.keys() if '/' + roi in s]
+            correct_short_labels = [s.split('/')[0] for s in correct_labels]
+
+            for idx, label in enumerate(correct_labels):
+                plt.plot(x_axis, means[label], label=correct_short_labels[idx])
+
+            plt.vlines(170, ymin=min_value, ymax=max_value)
+
+            path = self.file_info['output_folder'] + '/epochs/' + roi + '.png'
+            plt.title(roi)
+            plt.legend()
+            plt.savefig(path)
+            plt.close()
+
+        return means
 
     def get_raw_ndarray(self):
         """

@@ -1,19 +1,47 @@
-import numpy as np
+from matplotlib import pyplot as plt
 
 
-def define_rois(channel_list):
-    rois = dict(
-        central=["Cz", "C3", "C4"],
-        frontal=["Fz", "Fp1", "F3", "F7", "FC1", "FC2", "F4", "F8", "Fp2"],
-        occipital_parietal=["O1", "Oz", "O2", "Pz", "P3", "P7", "P4", "P8"],
-        temporal=["FC6", "FC5", "T7", "T8", "CP5", "CP6", "FT9", "FT10", "TP9", "TP10"],
-    )
+def derive_conditions_rois(labels):
+    conditions = [s.split('/')[0] for s in labels]
+    conditions = list(set(conditions))
+    rois = [s.split('/')[1] for s in labels]
+    rois = list(set(rois))
+    return conditions, rois
 
-    rois_numbers = dict(
-        central=np.array([np.where(channel_list == i)[0][0] for i in rois['central']]),
-        frontal=np.array([np.where(channel_list == i)[0][0] for i in rois['frontal']]),
-        occipital_parietal=np.array([np.where(channel_list == i)[0][0] for i in rois['occipital_parietal']]),
-        temporal=np.array([np.where(channel_list == i)[0][0] for i in rois['temporal']]),
-    )
 
-    return rois_numbers
+def plot_mean_epochs(mean_signals, conditions, rois):
+
+    x_axis = list(range(-200, 802))
+    for condition in conditions:
+        correct_labels = [s for s in mean_signals.keys() if condition + '/' in s]
+        correct_short_labels = [s.split('/')[1] for s in correct_labels]
+
+        print(mean_signals)
+        for idx, label in enumerate(correct_labels):
+            plt.plot(x_axis, mean_signals[label], label=correct_short_labels[idx])
+            print(len(mean_signals[label]))
+            exit(1)
+
+        # plt.vlines(170, ymin=min_value, ymax=max_value)
+
+        path = '../image/epochs/' + condition + '.png'
+        plt.title(condition)
+        plt.legend()
+        # plt.savefig(path)
+        plt.show()
+
+    for roi in rois:
+
+        correct_labels = [s for s in mean_signals.keys() if '/' + roi in s]
+        correct_short_labels = [s.split('/')[0] for s in correct_labels]
+
+        for idx, label in enumerate(correct_labels):
+            plt.plot(x_axis, mean_signals[label], label=correct_short_labels[idx])
+
+        # plt.vlines(170, ymin=min_value, ymax=max_value)
+
+        path = '../image/epochs/' + roi + '.png'
+        plt.title(roi)
+        plt.legend()
+        # plt.savefig(path)
+        plt.show()
