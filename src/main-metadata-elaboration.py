@@ -121,6 +121,7 @@ if __name__ == '__main__':
     # creation of results dataframe
     responses = pd.DataFrame(columns=new_columns)
 
+    mean_ratings = {}
     # cycling over all participants codes (found in online form)
     for code in codes:
 
@@ -134,6 +135,20 @@ if __name__ == '__main__':
 
         # reading dataframe
         df = pd.read_csv(correct)
+
+        short_names = []
+        image_names = df.loc[:, 'img_name']
+        original_image_names = [name for name in image_names if '_orig' in name]
+        original_image_names = list(set(original_image_names))
+
+        for name in original_image_names:
+            image_ratings = df.loc[df['img_name'] == name, ['valence_slider.response', 'arousal_slider.response']].values.tolist()[0]
+            label = name.rsplit('_', 1)[0]
+
+            if label in mean_ratings:
+                mean_ratings[label] = np.concatenate((mean_ratings[label], np.array([image_ratings])))
+            else:
+                mean_ratings[label] = np.array([image_ratings])
 
         # extraction of the columns of interest and subsequent saving
         data = df[columns]
@@ -172,8 +187,25 @@ if __name__ == '__main__':
 
         responses = pd.concat([responses, data])
 
-    # saving of the csv file containing all the data
+    for image in mean_ratings.keys():
+        mean_ratings[image] = np.mean(mean_ratings[image], axis=0)
+
     responses = responses.rename(columns={'valence_slider.response': 'valence', 'arousal_slider.response': 'arousal'})
+    responses['new_vm'] = 0
+    responses['new_am'] = 0
+    responses['new_valence_diff'] = 0
+    responses['new_arousal_diff'] = 0
+
+    for num, row in responses.iterrows():
+        img_name = row.loc['img_name'].rsplit('_', 1)[0]
+        new_means = mean_ratings[img_name]
+        responses.at[num, 'new_vm'] = new_means[0]
+        responses.at[num, 'new_am'] = new_means[1]
+
+        responses.at[num, 'new_valence_diff'] = new_means[0] - row.loc['valence']
+        responses.at[num, 'new_arousal_diff'] = new_means[1] - row.loc['arousal']
+
+    # saving of the csv file containing all the data
     responses.to_csv(rating_path+'/ratings-results.csv')
 
     # to visually check normality for statistical tests
@@ -188,3 +220,16 @@ if __name__ == '__main__':
     plt.title('Arousal difference')
     plt.show()
     plt.savefig(rating_path+'/distribution_arousal_difference.jpg')
+
+    # to visually check normality for statistical tests from new means
+    valence_difference = responses.loc[:, 'new_valence_diff']
+    plt.hist(valence_difference)
+    plt.title('New valence difference')
+    plt.show()
+    plt.savefig(rating_path+'/distribution_new_valence_difference.jpg')
+
+    arousal_difference = responses.loc[:, 'new_arousal_diff']
+    plt.hist(arousal_difference)
+    plt.title('New arousal difference')
+    plt.show()
+    plt.savefig(rating_path+'/distribution_new_arousal_difference.jpg')
