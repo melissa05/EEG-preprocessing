@@ -1,9 +1,8 @@
 import glob
 import re
 
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
+from functions import *
 
 
 def create_personality_matrix(num_personalities, num_data, personality_types):
@@ -35,10 +34,10 @@ def create_personality_matrix(num_personalities, num_data, personality_types):
 
         index = personality_types.index(name)
 
-        for id in plus:
-            personality_matrix[index, id-1] = +1
-        for id in minus:
-            personality_matrix[index, id-1] = -1
+        for idx in plus:
+            personality_matrix[index, idx - 1] = +1
+        for idx in minus:
+            personality_matrix[index, idx - 1] = -1
 
     # personality bias vector definition according to the explanation
     personality_bias = [20, 14, 14, 38, 8]
@@ -199,44 +198,28 @@ if __name__ == '__main__':
     for num, row in responses.iterrows():
         img_name = row.loc['img_name'].rsplit('_', 1)[0]
         new_means = mean_ratings[img_name]
-        responses.at[num, 'new_vm'] = new_means[0]
-        responses.at[num, 'new_am'] = new_means[1]
+        responses.at[num, 'new_vm'] = round(new_means[0], 6)
+        responses.at[num, 'new_am'] = round(new_means[1], 6)
 
-        responses.at[num, 'new_valence_diff'] = new_means[0] - row.loc['valence']
-        responses.at[num, 'new_arousal_diff'] = new_means[1] - row.loc['arousal']
+        responses.at[num, 'new_valence_diff'] = round(new_means[0] - row.loc['valence'], 6)
+        responses.at[num, 'new_arousal_diff'] = round(new_means[1] - row.loc['arousal'], 6)
 
     # saving of the csv file containing all the data
     responses.to_csv(rating_path+'/ratings-results.csv')
 
     means_difference = np.array(responses.loc[:, 'vm'].values.tolist()) - np.array(responses.loc[:, 'new_vm'].values.tolist())
-    print(means_difference)
-    plt.hist(means_difference)
-    plt.title('Means difference')
-    plt.show()
-    plt.savefig(rating_path+'/means_difference.jpg')
+    plot_distribution(means_difference, rating_path+'/means_difference.jpg')
 
     # to visually check normality for statistical tests
     valence_difference = responses.loc[:, 'valence_diff']
-    plt.hist(valence_difference)
-    plt.title('Valence difference')
-    plt.show()
-    plt.savefig(rating_path+'/distribution_valence_difference.jpg')
+    plot_distribution(valence_difference, rating_path + '/distribution_valence_difference.jpg')
 
     arousal_difference = responses.loc[:, 'arousal_diff']
-    plt.hist(arousal_difference)
-    plt.title('Arousal difference')
-    plt.show()
-    plt.savefig(rating_path+'/distribution_arousal_difference.jpg')
+    plot_distribution(arousal_difference, rating_path + '/distribution_arousal_difference.jpg')
 
     # to visually check normality for statistical tests from new means
     valence_difference = responses.loc[:, 'new_valence_diff']
-    plt.hist(valence_difference)
-    plt.title('New valence difference')
-    plt.show()
-    plt.savefig(rating_path+'/distribution_new_valence_difference.jpg')
+    plot_distribution(valence_difference, rating_path + '/distribution_new_valence_difference.jpg')
 
     arousal_difference = responses.loc[:, 'new_arousal_diff']
-    plt.hist(arousal_difference)
-    plt.title('New arousal difference')
-    plt.show()
-    plt.savefig(rating_path+'/distribution_new_arousal_difference.jpg')
+    plot_distribution(arousal_difference, rating_path + '/distribution_new_arousal_difference.jpg')

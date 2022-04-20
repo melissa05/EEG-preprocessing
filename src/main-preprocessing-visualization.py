@@ -24,7 +24,8 @@ def get_path():
 if __name__ == '__main__':
 
     # path = get_path()
-    paths = ['../data/eeg/subj_maba09_block1.xdf', '../data/eeg/subj_soze31_block1.xdf']
+    paths = ['../data/eeg/subj_maba09_block1.xdf', '../data/eeg/subj_soze31_block1.xdf',
+             '../data/eeg/subj_nipe10_block1.xdf']
     signals_means = {}
 
     for path in paths:
@@ -40,8 +41,6 @@ if __name__ == '__main__':
         for key in means.keys():
             if key in signals_means:
                 signals_means[key] = np.concatenate((signals_means[key], np.array([means[key]])), axis=0)
-                # print(signals_means[key])
-                # exit(1)
             else:
                 signals_means[key] = np.array([means[key]])
 
