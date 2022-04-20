@@ -208,6 +208,13 @@ if __name__ == '__main__':
     # saving of the csv file containing all the data
     responses.to_csv(rating_path+'/ratings-results.csv')
 
+    means_difference = np.array(responses.loc[:, 'vm'].values.tolist()) - np.array(responses.loc[:, 'new_vm'].values.tolist())
+    print(means_difference)
+    plt.hist(means_difference)
+    plt.title('Means difference')
+    plt.show()
+    plt.savefig(rating_path+'/means_difference.jpg')
+
     # to visually check normality for statistical tests
     valence_difference = responses.loc[:, 'valence_diff']
     plt.hist(valence_difference)
