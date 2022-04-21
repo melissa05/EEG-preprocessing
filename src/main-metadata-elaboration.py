@@ -5,46 +5,6 @@ import pandas as pd
 from functions import *
 
 
-def create_personality_matrix(num_personalities, num_data, personality_types):
-    """
-    Creation of multiplication matrix and bias vector for the computation of the personality test according to the
-    definition
-    :param personality_types:
-    :param num_personalities: number of personalities types in the study
-    :param num_data: number of data to which the subject has answered
-    :return: multiplication matrix and bias vector
-    """
-
-    # empty personality matrix
-    personality_matrix = np.zeros([num_personalities, num_data])
-
-    # where to put +1 or -1 in the personality matrix for each row
-    E = {'name': 'E', '+': [1, 11, 21, 31, 41], '-': [6, 16, 26, 36, 46]}
-    A = {'name': 'A', '+': [7, 17, 27, 37, 42, 47], '-': [2, 12, 22, 32]}
-    C = {'name': 'C', '+': [3, 13, 23, 33, 43, 48], '-': [8, 18, 28, 38]}
-    N = {'name': 'N', '+': [9, 19], '-': [4, 14, 24, 29, 34, 39, 44, 49]}
-    O = {'name': 'O', '+': [5, 15, 25, 35, 40, 45, 50], '-': [10, 20, 30]}
-
-    # filling of the matrix according to the definition
-    for dict in [E, A, C, N, O]:
-
-        name = dict['name']
-        plus = dict['+']
-        minus = dict['-']
-
-        index = personality_types.index(name)
-
-        for idx in plus:
-            personality_matrix[index, idx - 1] = +1
-        for idx in minus:
-            personality_matrix[index, idx - 1] = -1
-
-    # personality bias vector definition according to the explanation
-    personality_bias = [20, 14, 14, 38, 8]
-
-    return personality_matrix, personality_bias
-
-
 if __name__ == '__main__':
 
     # unique filepath for the form results file
@@ -207,19 +167,44 @@ if __name__ == '__main__':
     # saving of the csv file containing all the data
     responses.to_csv(rating_path+'/ratings-results.csv')
 
+    conditions = responses.loc[:, 'manipulation'].values.tolist()
+    conditions = list(set(conditions))
+
+    images_output = '../images/distributions/'
+
+    for condition in conditions:
+
+        means_difference = np.array(responses.loc[responses['manipulation'] == condition, 'vm'].values.tolist()) - \
+                           np.array(responses.loc[responses['manipulation'] == condition, 'new_vm'].values.tolist())
+        plot_distribution(means_difference, images_output + condition + ' means_difference.jpg')
+
+        # to visually check normality for statistical tests
+        valence_difference = responses.loc[responses['manipulation'] == condition, 'valence_diff']
+        plot_distribution(valence_difference, images_output + condition + ' valence_difference.jpg')
+
+        arousal_difference = responses.loc[responses['manipulation'] == condition, 'arousal_diff']
+        plot_distribution(arousal_difference, images_output + condition + ' arousal_difference.jpg')
+
+        # to visually check normality for statistical tests from new means
+        valence_difference = responses.loc[responses['manipulation'] == condition, 'new_valence_diff']
+        plot_distribution(valence_difference, images_output + condition + ' new_valence_difference.jpg')
+
+        arousal_difference = responses.loc[responses['manipulation'] == condition, 'new_arousal_diff']
+        plot_distribution(arousal_difference, images_output + condition + ' new_arousal_difference.jpg')
+
     means_difference = np.array(responses.loc[:, 'vm'].values.tolist()) - np.array(responses.loc[:, 'new_vm'].values.tolist())
-    plot_distribution(means_difference, rating_path+'/means_difference.jpg')
+    plot_distribution(means_difference, images_output+'/distribution_means_difference.jpg')
 
     # to visually check normality for statistical tests
     valence_difference = responses.loc[:, 'valence_diff']
-    plot_distribution(valence_difference, rating_path + '/distribution_valence_difference.jpg')
+    plot_distribution(valence_difference, images_output + '/distribution_valence_difference.jpg')
 
     arousal_difference = responses.loc[:, 'arousal_diff']
-    plot_distribution(arousal_difference, rating_path + '/distribution_arousal_difference.jpg')
+    plot_distribution(arousal_difference, images_output + '/distribution_arousal_difference.jpg')
 
     # to visually check normality for statistical tests from new means
     valence_difference = responses.loc[:, 'new_valence_diff']
-    plot_distribution(valence_difference, rating_path + '/distribution_new_valence_difference.jpg')
+    plot_distribution(valence_difference, images_output + '/distribution_new_valence_difference.jpg')
 
     arousal_difference = responses.loc[:, 'new_arousal_diff']
-    plot_distribution(arousal_difference, rating_path + '/distribution_new_arousal_difference.jpg')
+    plot_distribution(arousal_difference, images_output + '/distribution_new_arousal_difference.jpg')

@@ -24,8 +24,10 @@ def get_path():
 if __name__ == '__main__':
 
     # path = get_path()
-    paths = ['../data/eeg/subj_maba09_block1.xdf', '../data/eeg/subj_soze31_block1.xdf',
-             '../data/eeg/subj_nipe10_block1.xdf']
+    paths = ['../data/eeg/subj_maba09_block1.xdf',
+             '../data/eeg/subj_soze31_block1.xdf', '../data/eeg/subj_nipe10_block1.xdf',
+             '../data/eeg/subj_dino02_block1.xdf']
+
     signals_means = {}
 
     for path in paths:
@@ -35,7 +37,7 @@ if __name__ == '__main__':
         eeg.filter_raw()
         eeg.set_reference()
         # eeg.visualize_raw()
-        eeg.define_epochs_raw(visualize=False)
+        eeg.define_epochs_raw(visualize=True)
 
         means = eeg.plot_mean_epochs()
         for key in means.keys():
@@ -43,6 +45,9 @@ if __name__ == '__main__':
                 signals_means[key] = np.concatenate((signals_means[key], np.array([means[key]])), axis=0)
             else:
                 signals_means[key] = np.array([means[key]])
+
+    for key in signals_means.keys():
+        signals_means[key] = np.mean(signals_means[key], axis=0)
 
     conditions, rois = derive_conditions_rois(labels=signals_means.keys())
     plot_mean_epochs(signals_means, conditions, rois)

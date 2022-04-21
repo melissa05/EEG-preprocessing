@@ -4,6 +4,46 @@ import pylab as py
 from scipy import optimize
 
 
+def create_personality_matrix(num_personalities, num_data, personality_types):
+    """
+    Creation of multiplication matrix and bias vector for the computation of the personality test according to the
+    definition
+    :param personality_types:
+    :param num_personalities: number of personalities types in the study
+    :param num_data: number of data to which the subject has answered
+    :return: multiplication matrix and bias vector
+    """
+
+    # empty personality matrix
+    personality_matrix = np.zeros([num_personalities, num_data])
+
+    # where to put +1 or -1 in the personality matrix for each row
+    E = {'name': 'E', '+': [1, 11, 21, 31, 41], '-': [6, 16, 26, 36, 46]}
+    A = {'name': 'A', '+': [7, 17, 27, 37, 42, 47], '-': [2, 12, 22, 32]}
+    C = {'name': 'C', '+': [3, 13, 23, 33, 43, 48], '-': [8, 18, 28, 38]}
+    N = {'name': 'N', '+': [9, 19], '-': [4, 14, 24, 29, 34, 39, 44, 49]}
+    O = {'name': 'O', '+': [5, 15, 25, 35, 40, 45, 50], '-': [10, 20, 30]}
+
+    # filling of the matrix according to the definition
+    for dict in [E, A, C, N, O]:
+
+        name = dict['name']
+        plus = dict['+']
+        minus = dict['-']
+
+        index = personality_types.index(name)
+
+        for idx in plus:
+            personality_matrix[index, idx - 1] = +1
+        for idx in minus:
+            personality_matrix[index, idx - 1] = -1
+
+    # personality bias vector definition according to the explanation
+    personality_bias = [20, 14, 14, 38, 8]
+
+    return personality_matrix, personality_bias
+
+
 def derive_conditions_rois(labels):
     conditions = [s.split('/')[0] for s in labels]
     conditions = list(set(conditions))
@@ -13,39 +53,61 @@ def derive_conditions_rois(labels):
 
 
 def plot_mean_epochs(mean_signals, conditions, rois):
-
+    plt.close()
     x_axis = list(range(-200, 802, 2))
 
-    for condition in conditions:
+    fig, axs = plt.subplots(3, 2, figsize=(25.6, 19.2))
+    path = '../images/epochs/manipulations.png'
+
+    for i, ax in enumerate(fig.axes):
+
+        condition = conditions[i]
         correct_labels = [s for s in mean_signals.keys() if condition + '/' in s]
         correct_short_labels = [s.split('/')[1] for s in correct_labels]
 
+        min_value = np.inf
+        max_value = -np.inf
+
         for idx, label in enumerate(correct_labels):
-            plt.plot(x_axis, mean_signals[label].T, label=correct_short_labels[idx])
+            ax.plot(x_axis, mean_signals[label].T, label=correct_short_labels[idx])
+            min_value = min(min_value, min(mean_signals[label]))
+            max_value = max(max_value, max(mean_signals[label]))
 
-        # plt.vlines(170, ymin=min_value, ymax=max_value)
+        ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
+        ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
 
-        path = '../images/epochs/' + condition + '.png'
-        plt.title(condition)
-        plt.legend()
-        plt.savefig(path)
-        plt.show()
+        ax.set_title(condition)
 
-    for roi in rois:
+    plt.legend(bbox_to_anchor=(1.2, 2))
+    plt.savefig(path)
+    plt.close()
+
+    fig, axs = plt.subplots(2, 2, figsize=(25.6, 19.2))
+    path = '../images/epochs/rois.png'
+
+    for i, ax in enumerate(fig.axes):
+
+        roi = rois[i]
 
         correct_labels = [s for s in mean_signals.keys() if '/' + roi in s]
         correct_short_labels = [s.split('/')[0] for s in correct_labels]
 
+        min_value = np.inf
+        max_value = -np.inf
+
         for idx, label in enumerate(correct_labels):
-            plt.plot(x_axis, mean_signals[label].T, label=correct_short_labels[idx])
+            ax.plot(x_axis, mean_signals[label].T, label=correct_short_labels[idx])
+            min_value = min(min_value, min(mean_signals[label]))
+            max_value = max(max_value, max(mean_signals[label]))
 
-        # plt.vlines(170, ymin=min_value, ymax=max_value)
+        ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
+        ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
 
-        path = '../images/epochs/' + roi + '.png'
-        plt.title(roi)
-        plt.legend()
-        plt.savefig(path)
-        plt.show()
+        ax.set_title(roi)
+
+    plt.legend(bbox_to_anchor=(1.2, 1.1))
+    plt.savefig(path)
+    plt.close()
 
 
 def get_fitted_normal_distribution(data, number_bins=100):
@@ -66,7 +128,6 @@ def get_fitted_normal_distribution(data, number_bins=100):
 
 
 def plot_distribution(array_data, path):
-
     bins = np.linspace(array_data.min(), array_data.max(), 100)
     data = py.hist(array_data, bins=bins)
 
@@ -75,4 +136,4 @@ def plot_distribution(array_data, path):
 
     plt.title((path.rsplit('.', 1)[0]).rsplit('/', 1)[1])
     plt.savefig(path)
-    plt.show()
+    plt.close()

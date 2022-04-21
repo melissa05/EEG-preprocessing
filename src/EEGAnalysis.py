@@ -154,10 +154,13 @@ class EEGAnalysis:
 
         if signal:
             mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=50)
+            # plt.close()
         if psd:
             self.raw.plot_psd()
+            plt.close()
         if psd_topo:
             self.raw.plot_psd_topo()
+            plt.close()
 
     def set_reference(self, ref_type='average'):
         """
@@ -189,6 +192,8 @@ class EEGAnalysis:
 
             if only_manipulation:
                 manipulation = marker_data[0].split('/')[-1]
+                if manipulation == 'edges':
+                    manipulation = 'canny'
                 triggers['description'].append(manipulation)
             else:
                 triggers['description'].append(marker_data[0])
@@ -208,7 +213,8 @@ class EEGAnalysis:
                                eog=1e-3)  # 1 mV
 
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping,
-                                 tmin=t_min, tmax=t_max, reject=reject_criteria)
+                                 reject=reject_criteria,
+                                 tmin=t_min, tmax=t_max)
 
         if visualize:
             self.visualize_epochs(signal=True, topo_plot=False, conditional_epoch=True, rois=rois)
@@ -235,11 +241,12 @@ class EEGAnalysis:
 
                 for condition in self.event_mapping.keys():
                     images = self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers,
-                                                               vmin=-6e-9, vmax=6e-9,
+                                                               # vmin=-6e-9, vmax=6e-9,
                                                                scalings=viz_scaling, show=False)
 
                     for idx, img in enumerate(images):
                         img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + rois_names[idx] + '.png')
+                        plt.close(img)
             else:
                 for condition in self.event_mapping.keys():
                     self.epochs[condition].plot_image(scalings=viz_scaling, show=False)
@@ -247,6 +254,7 @@ class EEGAnalysis:
         for condition in self.event_mapping.keys():
             img = self.epochs[condition].plot_psd_topomap(vlim=(7, 45), show=False)
             img.savefig(self.file_info['output_folder'] + '/' + condition + '_topography.png')
+            plt.close(img)
 
     def define_rois(self):
 
@@ -277,11 +285,6 @@ class EEGAnalysis:
         rois_numbers = self.define_rois()
 
         means, epoch_signals = {}, {}
-
-        # questa cosa deve essere fatta su tutti i file che vengono analizzati, così da creare un pattern tra partecipanti
-        # - può essere inserito come funzione nella classe, essere ripetuto per ogni elemento della lista di dati e infine
-        # creare la matrice finale di medie
-        # HA SENSO SOLO INTRA-SOGGETTO O ANCHE INTER-SOGGETTO?
 
         for condition in conditions:
 
@@ -324,35 +327,47 @@ class EEGAnalysis:
 
         Path(self.file_info['output_folder'] + '/epochs/').mkdir(parents=True, exist_ok=True)
 
-        for condition in conditions:
+        fig, axs = plt.subplots(3, 2, figsize=(25.6, 19.2))
+        path = self.file_info['output_folder'] + '/epochs/conditions.png'
+
+        for i, ax in enumerate(fig.axes):
+
+            condition = conditions[i]
+
             correct_labels = [s for s in epoch_signals.keys() if condition + '/' in s]
             correct_short_labels = [s.split('/')[1] for s in correct_labels]
 
             for idx, label in enumerate(correct_labels):
-                plt.plot(x_axis, means[label], label=correct_short_labels[idx])
+                ax.plot(x_axis, means[label], label=correct_short_labels[idx])
 
-            plt.vlines(170, ymin=min_value, ymax=max_value)
+            ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
+            ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
+            ax.set_title(condition)
 
-            path = self.file_info['output_folder'] + '/epochs/' + condition + '.png'
-            plt.title(condition)
-            plt.legend()
-            plt.savefig(path)
-            plt.close()
+        plt.legend(bbox_to_anchor=(1.2, 2))
+        plt.savefig(path)
+        plt.close()
 
-        for roi in rois_numbers.keys():
+        fig, axs = plt.subplots(2, 2, figsize=(25.6, 19.2))
+        path = self.file_info['output_folder'] + '/epochs/rois.png'
+
+        for i, ax in enumerate(fig.axes):
+            roi = list(rois_numbers.keys())[i]
+
             correct_labels = [s for s in epoch_signals.keys() if '/' + roi in s]
             correct_short_labels = [s.split('/')[0] for s in correct_labels]
 
             for idx, label in enumerate(correct_labels):
-                plt.plot(x_axis, means[label], label=correct_short_labels[idx])
+                ax.plot(x_axis, means[label], label=correct_short_labels[idx])
 
-            plt.vlines(170, ymin=min_value, ymax=max_value)
+            ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
+            ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
 
-            path = self.file_info['output_folder'] + '/epochs/' + roi + '.png'
-            plt.title(roi)
-            plt.legend()
-            plt.savefig(path)
-            plt.close()
+            ax.set_title(roi)
+
+        plt.legend(bbox_to_anchor=(1.2, 1.1))
+        plt.savefig(path)
+        plt.close()
 
         return means
 
