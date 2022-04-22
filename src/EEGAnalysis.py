@@ -76,8 +76,9 @@ class EEGAnalysis:
         for i in range(len(dat)):
             stream_name = dat[i]['info']['name'][0]
 
-            # if stream_name == stream_names['Markers']:
-            #     orn_signal = dat[i]['time_series']
+            if stream_name == stream_names['Markers']:  # gets 'BrainVision RDA Markers' stream
+                orn_signal = dat[i]['time_series']
+                orn_instants = dat[i]['time_stamps']
 
             if stream_name == stream_names['EEG']:
                 self.eeg_signal = dat[i]['time_series'][:, :32]
@@ -85,10 +86,104 @@ class EEGAnalysis:
                 self.eeg_instants = dat[i]['time_stamps']
                 self.eeg_fs = int(float(dat[i]['info']['nominal_srate'][0]))
                 self.load_channels(dat[i]['info']['desc'][0]["channels"][0]['channel'])
+                effective_sample_frequency = float(dat[i]['info']['effective_srate'])
+
+                # todo: make assertion about sampling rate check
 
             if stream_name == stream_names['Triggers']:
                 self.marker_ids = dat[i]['time_series']
                 self.marker_instants = dat[i]['time_stamps']
+
+        self.eeg_instants = np.array(self.eeg_instants)
+        self.eeg_signal = np.array(self.eeg_signal)
+
+        # -------------------------------------------------
+
+        print('Markers: ', orn_signal)
+        print('Markers instants: ', orn_instants)
+        print('Nominal srate: ', self.eeg_fs)
+        print('Effective srate: ', effective_sample_frequency)
+
+        print('Total number of samples: ', len(self.eeg_instants))
+        final_count = len(self.eeg_signal)
+        for lost in orn_signal:
+            final_count += int(lost[0].split(': ')[1])
+        print('Number of samples with lost samples integration: ', final_count)
+
+        differences = [i - self.eeg_instants[idx] for idx, i in enumerate(self.eeg_instants[1:])]
+        print('Unique differences in instants: ', np.unique(np.array(differences)))
+
+        final_eeg_signal = []
+        number_channels = self.eeg_signal.shape[1]
+
+        count = 0
+        last = -1
+
+        for idx, lost in enumerate(orn_instants):
+
+            x = np.where(self.eeg_instants < lost)[0][(last + 1):]
+
+            if len(x) != 0:
+                # print(x)
+                #
+                # print(lost)
+                # print(orn_instants[idx-1])
+                # print(orn_signal[idx-1][0].split(': ')[1])
+                # exit(1)
+
+                last = x[-1]
+
+                if idx == 0:
+                    final_eeg_signal = list(self.eeg_signal[x])
+                else:
+                    final_eeg_signal = np.concatenate((final_eeg_signal, self.eeg_signal[x]))
+
+            missing_samples = int(orn_signal[idx][0].split(': ')[1])
+            final_eeg_signal = np.concatenate((final_eeg_signal, np.full((missing_samples, number_channels), 300e-6)))
+
+            count += missing_samples
+
+        x = np.where(self.eeg_instants > 0)[0][last + 1:]
+        final_eeg_signal = np.concatenate((final_eeg_signal, self.eeg_signal[x]))
+        count += len(x)
+
+        print(count)
+        print(len(self.eeg_signal))
+
+        missing = len(final_eeg_signal) - len(self.eeg_signal)
+        step = 1/self.eeg_fs
+        new_samples = [self.eeg_instants[0] - (missing-i)*step for i in range(missing)]
+        final_instants = np.concatenate((np.array(new_samples), self.eeg_instants))
+        # new_samples = [self.eeg_instants[-1] + (i+1)*step for i in range(missing)]
+        # final_instants = np.concatenate((self.eeg_instants, np.array(new_samples)))
+
+        self.eeg_signal = final_eeg_signal
+        self.eeg_instants = final_instants
+
+        # print(self.eeg_signal)
+
+        return
+
+        # differences = []
+        # for idx, instant in enumerate(self.marker_instants[1:]):
+        #     differences.append(instant-self.marker_instants[idx-1])
+        #
+        # differences = [i-3 for i in differences]
+        # # print(differences)
+        # plt.plot(differences[1:])
+        # plt.show()
+        #
+        # print(self.eeg_instants)
+        #
+        # differences = []
+        # for idx, instant in enumerate(self.eeg_instants[1:]):
+        #     differences.append(instant-self.eeg_instants[idx-1])
+        #
+        # differences = [1/i for i in differences]
+        # # print(differences)
+        # plt.plot(differences[1:])
+        # plt.show()
+        # exit(1)
 
     def load_channels(self, dict_channels):
         """
@@ -116,7 +211,7 @@ class EEGAnalysis:
         """
 
         self.info = mne.create_info(list(self.channels_names.values()), self.eeg_fs, list(self.channels_types.values()))
-        self.raw = mne.io.RawArray(self.eeg_signal.T, self.info)
+        self.raw = mne.io.RawArray(self.eeg_signal.T, self.info, first_samp=self.eeg_instants[0])
 
         # montage setting
         standard_montage = mne.channels.make_standard_montage('standard_1020')
@@ -182,6 +277,7 @@ class EEGAnalysis:
 
         # generation of the events according to the definition
         triggers = {'onsets': [], 'duration': [], 'description': []}
+        print(self.marker_instants)
         for idx, marker_data in enumerate(self.marker_ids):
 
             if marker_data[0] == 'intro' or marker_data[0] == 'pause' or marker_data[0] == 'end':
