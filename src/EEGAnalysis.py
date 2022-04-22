@@ -72,6 +72,8 @@ class EEGAnalysis:
         # data loading
         dat = pyxdf.load_xdf(self.data_path)[0]
 
+        orn_signal, orn_instants = [], []
+
         # data iteration to extract the main information
         for i in range(len(dat)):
             stream_name = dat[i]['info']['name'][0]
@@ -97,11 +99,14 @@ class EEGAnalysis:
         self.eeg_instants = np.array(self.eeg_instants)
         self.eeg_signal = np.array(self.eeg_signal)
 
-        # -------------------------------------------------
+        if len(orn_signal) != 0:
+            self.fix_lost_samples(orn_signal, orn_instants, effective_sample_frequency)
 
-        print('Markers: ', orn_signal)
-        print('Markers instants: ', orn_instants)
-        print('Nominal srate: ', self.eeg_fs)
+    def fix_lost_samples(self, orn_signal, orn_instants, effective_sample_frequency):
+
+        print('BrainVision RDA Markers: ', orn_signal)
+        print('BrainVision RDA Markers instants: ', orn_instants)
+        print('\nNominal srate: ', self.eeg_fs)
         print('Effective srate: ', effective_sample_frequency)
 
         print('Total number of samples: ', len(self.eeg_instants))
@@ -124,12 +129,6 @@ class EEGAnalysis:
             x = np.where(self.eeg_instants < lost)[0][(last + 1):]
 
             if len(x) != 0:
-                # print(x)
-                #
-                # print(lost)
-                # print(orn_instants[idx-1])
-                # print(orn_signal[idx-1][0].split(': ')[1])
-                # exit(1)
 
                 last = x[-1]
 
@@ -147,9 +146,6 @@ class EEGAnalysis:
         final_eeg_signal = np.concatenate((final_eeg_signal, self.eeg_signal[x]))
         count += len(x)
 
-        print(count)
-        print(len(self.eeg_signal))
-
         missing = len(final_eeg_signal) - len(self.eeg_signal)
         step = 1/self.eeg_fs
         new_samples = [self.eeg_instants[0] - (missing-i)*step for i in range(missing)]
@@ -162,28 +158,24 @@ class EEGAnalysis:
 
         # print(self.eeg_signal)
 
-        return
+        differences = []
+        for idx, instant in enumerate(self.marker_instants[1:]):
+            differences.append(instant-self.marker_instants[idx-1])
 
-        # differences = []
-        # for idx, instant in enumerate(self.marker_instants[1:]):
-        #     differences.append(instant-self.marker_instants[idx-1])
-        #
-        # differences = [i-3 for i in differences]
-        # # print(differences)
+        differences = [i-3 for i in differences]
+        # print(differences)
         # plt.plot(differences[1:])
         # plt.show()
-        #
-        # print(self.eeg_instants)
-        #
-        # differences = []
-        # for idx, instant in enumerate(self.eeg_instants[1:]):
-        #     differences.append(instant-self.eeg_instants[idx-1])
-        #
+
+        differences = []
+        for idx, instant in enumerate(self.eeg_instants[1:]):
+            differences.append(instant-self.eeg_instants[idx-1])
+
         # differences = [1/i for i in differences]
-        # # print(differences)
-        # plt.plot(differences[1:])
+        # print(differences)
+        # plt.figure(figsize=(30, 2))
+        # plt.plot(differences[25000:30000])
         # plt.show()
-        # exit(1)
 
     def load_channels(self, dict_channels):
         """

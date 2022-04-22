@@ -9,7 +9,6 @@ from functions import *
 
 
 def get_path():
-
     if 'tkinter' in sys.modules:
         from tkinter import filedialog
         path_selected = filedialog.askopenfilename(initialdir=os.getcwd(), title="Select a File",
@@ -25,8 +24,8 @@ if __name__ == '__main__':
 
     # path = get_path()
     paths = ['../data/eeg/subj_maba09_block1.xdf']
-             # ['../data/eeg/subj_maba09_block1.xdf', '../data/eeg/subj_soze31_block1.xdf', '../data/eeg/subj_nipe10_block1.xdf',
-             # '../data/eeg/subj_dino02_block1.xdf']
+    # ['../data/eeg/subj_maba09_block1.xdf', '../data/eeg/subj_soze31_block1.xdf',
+    # '../data/eeg/subj_nipe10_block1.xdf', '../data/eeg/subj_dino02_block1.xdf']
 
     signals_means = {}
 
