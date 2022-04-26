@@ -115,8 +115,36 @@ class EEGAnalysis:
             final_count += int(lost[0].split(': ')[1])
         print('Number of samples with lost samples integration: ', final_count)
 
-        differences = [i - self.eeg_instants[idx] for idx, i in enumerate(self.eeg_instants[1:])]
-        print('Unique differences in instants: ', np.unique(np.array(differences)))
+        total_time = len(self.eeg_instants)/effective_sample_frequency
+        real_number_samples = total_time * self.eeg_fs
+        print('Number of samples with real sampling frequency: ', real_number_samples)
+
+        # print(self.eeg_instants)
+
+        differences = np.diff(self.eeg_instants)
+        differences = (differences - (1 / self.eeg_fs)) * self.eeg_fs
+        # differences = np.round(differences, 4)
+        print('Unique differences in instants: ', np.unique(differences))
+        print('Sum of diff ', np.sum(differences))
+        # plt.plot(differences)
+        # plt.ylim([1, 2])
+        # plt.show()
+
+        exit(1)
+
+        new_marker_signal = self.marker_instants
+
+        for idx, lost_instant in enumerate(orn_instants):
+            x = np.where(self.marker_instants < lost_instant)[0][-1]
+
+            missing_samples = int(orn_signal[idx][0].split(': ')[1])
+            additional_time = missing_samples / self.eeg_fs
+
+            new_marker_signal[(x+1):] = np.array(new_marker_signal[(x+1):]) + additional_time
+
+        return
+
+        # -----------------------------------------
 
         final_eeg_signal = []
         number_channels = self.eeg_signal.shape[1]
@@ -202,6 +230,7 @@ class EEGAnalysis:
         Creation of MNE raw instance from the data, setting the general information and the relative montage
         """
 
+        print('\n')
         self.info = mne.create_info(list(self.channels_names.values()), self.eeg_fs, list(self.channels_types.values()))
         self.raw = mne.io.RawArray(self.eeg_signal.T, self.info, first_samp=self.eeg_instants[0])
 
@@ -257,6 +286,31 @@ class EEGAnalysis:
 
         mne.set_eeg_reference(self.raw, ref_channels=ref_type, copy=False)
 
+        ica = mne.preprocessing.ICA(n_components=30, max_iter='auto', random_state=97)
+        ica.fit(self.raw)
+        ica.plot_sources(self.raw, show_scrollbars=True)
+        ica.plot_components()
+
+        ica.exclude = []
+        # find which ICs match the EOG pattern
+        eog_indices, eog_scores = ica.find_bads_eog(self.raw)
+        ica.exclude = eog_indices
+
+        # barplot of ICA component "EOG match" scores
+        ica.plot_scores(eog_scores)
+
+        # plot diagnostics
+        ica.plot_properties(self.raw, picks=eog_indices)
+
+        # plot ICs applied to raw data, with EOG matches highlighted
+        ica.plot_sources(self.raw, show_scrollbars=False)
+
+        reconst_raw = self.raw.copy()
+        ica.apply(reconst_raw)
+
+        reconst_raw.plot(show_scrollbars=False)
+        exit(1)
+
     def define_epochs_raw(self, visualize=True, only_manipulation=True, rois=True):
         """
         Function to extract events from the marker data, generate the correspondent epochs and determine annotation in
@@ -269,7 +323,7 @@ class EEGAnalysis:
 
         # generation of the events according to the definition
         triggers = {'onsets': [], 'duration': [], 'description': []}
-        print(self.marker_instants)
+
         for idx, marker_data in enumerate(self.marker_ids):
 
             if marker_data[0] == 'intro' or marker_data[0] == 'pause' or marker_data[0] == 'end':
@@ -300,7 +354,8 @@ class EEGAnalysis:
         reject_criteria = dict(eeg=200e-6,  # 200 µV
                                eog=1e-3)  # 1 mV
 
-        self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping,
+        self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping, preload=True,
+                                 baseline=(t_min, 0),
                                  reject=reject_criteria,
                                  tmin=t_min, tmax=t_max)
 
@@ -343,6 +398,20 @@ class EEGAnalysis:
             img = self.epochs[condition].plot_psd_topomap(vlim=(7, 45), show=False)
             img.savefig(self.file_info['output_folder'] + '/' + condition + '_topography.png')
             plt.close(img)
+
+        # frequencies = np.arange(5, 40, 2)
+        # power = mne.time_frequency.tfr_morlet(self.epochs, freqs=frequencies, n_cycles=1, use_fft=True,
+        #                                       return_itc=False, decim=2, n_jobs=1, average=False)
+        #
+        # for condition in self.event_mapping.keys():
+        #     rois_numbers = self.define_rois()
+        #     rois_names = list(rois_numbers.keys())
+        #
+        #     images = power[condition].average().plot(mode='mean', show=False)
+
+            # for idx, img in enumerate(images):
+            #     img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + rois_names[idx] + '_freq.png')
+            #     plt.close(img)
 
     def define_rois(self):
 
