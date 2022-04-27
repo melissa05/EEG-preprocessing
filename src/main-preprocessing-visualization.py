@@ -23,10 +23,10 @@ def get_path():
 if __name__ == '__main__':
 
     # path = get_path()
-    paths = ['../data/eeg/subj_jomo20_block1.xdf']
+    paths = ['../data/eeg/subj_mama13_block1.xdf']
     # ['../data/eeg/subj_maba09_block1.xdf', '../data/eeg/subj_soze31_block1.xdf',
-    # '../data/eeg/subj_nipe10_block1.xdf', '../data/eeg/subj_dino02_block1.xdf',
-    # '../data/eeg/subj_jomo20_block1.xdf']
+    # '../data/eeg/subj_nipe10_block1.xdf', '../data/eeg/subj_dino02_block1.xdf']
+    # ['../data/eeg/subj_jomo20_block1.xdf', '../data/eeg/subj_mama13_block1.xdf']
 
     signals_means = {}
 

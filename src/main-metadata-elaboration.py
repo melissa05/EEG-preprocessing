@@ -64,6 +64,7 @@ if __name__ == '__main__':
         participants_results.loc[participants_results.shape[0]] = results
 
     # saving of the results regarding the form
+    participants_results = participants_results.rename(columns={'participant code': 'code'})
     participants_results.to_csv(output_folder+'/form-results.csv')
 
     # COMPUTATION OF ANALYSIS FOR ONLINE IMAGE EVALUATION
@@ -134,77 +135,18 @@ if __name__ == '__main__':
             elif valence <= 0 and arousal <= 0:
                 labels.append('LVLA')
 
-            new_valence = new_ratings.loc[index, 'valence_slider.response']
-            new_arousal = new_ratings.loc[index, 'arousal_slider.response']
-
-            valence_difference.append(valence-new_valence)
-            arousal_difference.append(arousal-new_arousal)
-
         data.insert(data.shape[1], 'label', labels, True)
-        data.insert(data.shape[1], 'valence_diff', valence_difference, True)
-        data.insert(data.shape[1], 'arousal_diff', arousal_difference, True)
 
         responses = pd.concat([responses, data])
 
     for image in mean_ratings.keys():
         mean_ratings[image] = np.mean(mean_ratings[image], axis=0)
 
-    responses = responses.rename(columns={'valence_slider.response': 'valence', 'arousal_slider.response': 'arousal'})
-    responses['new_vm'] = 0
-    responses['new_am'] = 0
-    responses['new_valence_diff'] = 0
-    responses['new_arousal_diff'] = 0
-
-    for num, row in responses.iterrows():
-        img_name = row.loc['img_name'].rsplit('_', 1)[0]
-        new_means = mean_ratings[img_name]
-        responses.at[num, 'new_vm'] = round(new_means[0], 6)
-        responses.at[num, 'new_am'] = round(new_means[1], 6)
-
-        responses.at[num, 'new_valence_diff'] = round(new_means[0] - row.loc['valence'], 6)
-        responses.at[num, 'new_arousal_diff'] = round(new_means[1] - row.loc['arousal'], 6)
+    responses = responses.rename(columns={'participant code': 'code',
+                                          'valence_slider.response': 'valence', 'arousal_slider.response': 'arousal'})
 
     # saving of the csv file containing all the data
     responses.to_csv(rating_path+'/ratings-results.csv')
 
     conditions = responses.loc[:, 'manipulation'].values.tolist()
     conditions = list(set(conditions))
-
-    images_output = '../images/distributions/'
-
-    for condition in conditions:
-
-        means_difference = np.array(responses.loc[responses['manipulation'] == condition, 'vm'].values.tolist()) - \
-                           np.array(responses.loc[responses['manipulation'] == condition, 'new_vm'].values.tolist())
-        plot_distribution(means_difference, images_output + condition + ' means_difference.jpg')
-
-        # to visually check normality for statistical tests
-        valence_difference = responses.loc[responses['manipulation'] == condition, 'valence_diff']
-        plot_distribution(valence_difference, images_output + condition + ' valence_difference.jpg')
-
-        arousal_difference = responses.loc[responses['manipulation'] == condition, 'arousal_diff']
-        plot_distribution(arousal_difference, images_output + condition + ' arousal_difference.jpg')
-
-        # to visually check normality for statistical tests from new means
-        valence_difference = responses.loc[responses['manipulation'] == condition, 'new_valence_diff']
-        plot_distribution(valence_difference, images_output + condition + ' new_valence_difference.jpg')
-
-        arousal_difference = responses.loc[responses['manipulation'] == condition, 'new_arousal_diff']
-        plot_distribution(arousal_difference, images_output + condition + ' new_arousal_difference.jpg')
-
-    means_difference = np.array(responses.loc[:, 'vm'].values.tolist()) - np.array(responses.loc[:, 'new_vm'].values.tolist())
-    plot_distribution(means_difference, images_output+'/distribution_means_difference.jpg')
-
-    # to visually check normality for statistical tests
-    valence_difference = responses.loc[:, 'valence_diff']
-    plot_distribution(valence_difference, images_output + '/distribution_valence_difference.jpg')
-
-    arousal_difference = responses.loc[:, 'arousal_diff']
-    plot_distribution(arousal_difference, images_output + '/distribution_arousal_difference.jpg')
-
-    # to visually check normality for statistical tests from new means
-    valence_difference = responses.loc[:, 'new_valence_diff']
-    plot_distribution(valence_difference, images_output + '/distribution_new_valence_difference.jpg')
-
-    arousal_difference = responses.loc[:, 'new_arousal_diff']
-    plot_distribution(arousal_difference, images_output + '/distribution_new_arousal_difference.jpg')

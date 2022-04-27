@@ -286,30 +286,30 @@ class EEGAnalysis:
 
         mne.set_eeg_reference(self.raw, ref_channels=ref_type, copy=False)
 
-        ica = mne.preprocessing.ICA(n_components=30, max_iter='auto', random_state=97)
-        ica.fit(self.raw)
-        ica.plot_sources(self.raw, show_scrollbars=True)
-        ica.plot_components()
-
-        ica.exclude = []
-        # find which ICs match the EOG pattern
-        eog_indices, eog_scores = ica.find_bads_eog(self.raw)
-        ica.exclude = eog_indices
-
-        # barplot of ICA component "EOG match" scores
-        ica.plot_scores(eog_scores)
-
-        # plot diagnostics
-        ica.plot_properties(self.raw, picks=eog_indices)
-
-        # plot ICs applied to raw data, with EOG matches highlighted
-        ica.plot_sources(self.raw, show_scrollbars=False)
-
-        reconst_raw = self.raw.copy()
-        ica.apply(reconst_raw)
-
-        reconst_raw.plot(show_scrollbars=False)
-        exit(1)
+        # ica = mne.preprocessing.ICA(n_components=30, max_iter='auto', random_state=97)
+        # ica.fit(self.raw)
+        # ica.plot_sources(self.raw, show_scrollbars=True)
+        # ica.plot_components()
+        #
+        # ica.exclude = []
+        # # find which ICs match the EOG pattern
+        # eog_indices, eog_scores = ica.find_bads_eog(self.raw)
+        # ica.exclude = eog_indices
+        #
+        # # barplot of ICA component "EOG match" scores
+        # ica.plot_scores(eog_scores)
+        #
+        # # plot diagnostics
+        # ica.plot_properties(self.raw, picks=eog_indices)
+        #
+        # # plot ICs applied to raw data, with EOG matches highlighted
+        # ica.plot_sources(self.raw, show_scrollbars=False)
+        #
+        # reconst_raw = self.raw.copy()
+        # ica.apply(reconst_raw)
+        #
+        # reconst_raw.plot(show_scrollbars=False)
+        # exit(1)
 
     def define_epochs_raw(self, visualize=True, only_manipulation=True, rois=True):
         """
@@ -358,6 +358,8 @@ class EEGAnalysis:
                                  baseline=(t_min, 0),
                                  reject=reject_criteria,
                                  tmin=t_min, tmax=t_max)
+
+        self.epochs = self.epochs.apply_baseline((t_min, t_max))
 
         if visualize:
             self.visualize_epochs(signal=True, topo_plot=False, conditional_epoch=True, rois=rois)
