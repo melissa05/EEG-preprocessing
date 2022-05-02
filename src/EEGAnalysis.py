@@ -73,6 +73,7 @@ class EEGAnalysis:
         dat = pyxdf.load_xdf(self.data_path)[0]
 
         orn_signal, orn_instants = [], []
+        effective_sample_frequency = None
 
         # data iteration to extract the main information
         for i in range(len(dat)):
@@ -89,8 +90,6 @@ class EEGAnalysis:
                 self.eeg_fs = int(float(dat[i]['info']['nominal_srate'][0]))
                 self.load_channels(dat[i]['info']['desc'][0]["channels"][0]['channel'])
                 effective_sample_frequency = float(dat[i]['info']['effective_srate'])
-
-                # todo: make assertion about sampling rate check
 
             if stream_name == stream_names['Triggers']:
                 self.marker_ids = dat[i]['time_series']
@@ -130,8 +129,6 @@ class EEGAnalysis:
         # plt.ylim([1, 2])
         # plt.show()
 
-        exit(1)
-
         new_marker_signal = self.marker_instants
 
         for idx, lost_instant in enumerate(orn_instants):
@@ -141,69 +138,6 @@ class EEGAnalysis:
             additional_time = missing_samples / self.eeg_fs
 
             new_marker_signal[(x+1):] = np.array(new_marker_signal[(x+1):]) + additional_time
-
-        return
-
-        # -----------------------------------------
-
-        final_eeg_signal = []
-        number_channels = self.eeg_signal.shape[1]
-
-        count = 0
-        last = -1
-
-        for idx, lost in enumerate(orn_instants):
-
-            x = np.where(self.eeg_instants < lost)[0][(last + 1):]
-
-            if len(x) != 0:
-
-                last = x[-1]
-
-                if idx == 0:
-                    final_eeg_signal = list(self.eeg_signal[x])
-                else:
-                    final_eeg_signal = np.concatenate((final_eeg_signal, self.eeg_signal[x]))
-
-            missing_samples = int(orn_signal[idx][0].split(': ')[1])
-            final_eeg_signal = np.concatenate((final_eeg_signal, np.full((missing_samples, number_channels), 300e-6)))
-
-            count += missing_samples
-
-        x = np.where(self.eeg_instants > 0)[0][last + 1:]
-        final_eeg_signal = np.concatenate((final_eeg_signal, self.eeg_signal[x]))
-        count += len(x)
-
-        missing = len(final_eeg_signal) - len(self.eeg_signal)
-        step = 1/self.eeg_fs
-        new_samples = [self.eeg_instants[0] - (missing-i)*step for i in range(missing)]
-        final_instants = np.concatenate((np.array(new_samples), self.eeg_instants))
-        # new_samples = [self.eeg_instants[-1] + (i+1)*step for i in range(missing)]
-        # final_instants = np.concatenate((self.eeg_instants, np.array(new_samples)))
-
-        self.eeg_signal = final_eeg_signal
-        self.eeg_instants = final_instants
-
-        # print(self.eeg_signal)
-
-        differences = []
-        for idx, instant in enumerate(self.marker_instants[1:]):
-            differences.append(instant-self.marker_instants[idx-1])
-
-        differences = [i-3 for i in differences]
-        # print(differences)
-        # plt.plot(differences[1:])
-        # plt.show()
-
-        differences = []
-        for idx, instant in enumerate(self.eeg_instants[1:]):
-            differences.append(instant-self.eeg_instants[idx-1])
-
-        # differences = [1/i for i in differences]
-        # print(differences)
-        # plt.figure(figsize=(30, 2))
-        # plt.plot(differences[25000:30000])
-        # plt.show()
 
     def load_channels(self, dict_channels):
         """
@@ -238,7 +172,7 @@ class EEGAnalysis:
         standard_montage = mne.channels.make_standard_montage('standard_1020')
         self.raw.set_montage(standard_montage)
 
-    def filter_raw(self, l_freq=0.5, h_freq=60, n_freq=50, order=8):
+    def filter_raw(self, l_freq=1, h_freq=60, n_freq=50, order=8):
         """
         Filter of MNE raw instance data with a band-pass filter and a notch filter
         :param l_freq: low frequency of band-pass filter
@@ -270,7 +204,7 @@ class EEGAnalysis:
 
         if signal:
             mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=50)
-            # plt.close()
+            plt.close()
         if psd:
             self.raw.plot_psd()
             plt.close()
@@ -286,30 +220,37 @@ class EEGAnalysis:
 
         mne.set_eeg_reference(self.raw, ref_channels=ref_type, copy=False)
 
-        # ica = mne.preprocessing.ICA(n_components=30, max_iter='auto', random_state=97)
-        # ica.fit(self.raw)
-        # ica.plot_sources(self.raw, show_scrollbars=True)
-        # ica.plot_components()
-        #
-        # ica.exclude = []
-        # # find which ICs match the EOG pattern
-        # eog_indices, eog_scores = ica.find_bads_eog(self.raw)
-        # ica.exclude = eog_indices
-        #
-        # # barplot of ICA component "EOG match" scores
-        # ica.plot_scores(eog_scores)
-        #
-        # # plot diagnostics
+    def ica_remove_eog(self):
+
+        n_components = list(self.channels_types.values()).count('eeg')
+
+        eeg_raw = self.raw.copy()
+        eeg_raw = eeg_raw.pick_types(eeg=True)
+
+        ica = mne.preprocessing.ICA(n_components=0.95, method='fastica', random_state=0)
+        eeg_raw.load_data()
+        ica.fit(eeg_raw)
+        ica.plot_sources(eeg_raw)
+        ica.plot_components()
+        # ica.plot_properties(eeg_raw)
+
+        # find which ICs match the EOG pattern
+        eog_indices, eog_scores = ica.find_bads_eog(self.raw)
+        ica.exclude = eog_indices
+
+        # barplot of ICA component "EOG match" scores
+        ica.plot_scores(eog_scores)
+
+        # plot diagnostics
         # ica.plot_properties(self.raw, picks=eog_indices)
-        #
-        # # plot ICs applied to raw data, with EOG matches highlighted
-        # ica.plot_sources(self.raw, show_scrollbars=False)
-        #
-        # reconst_raw = self.raw.copy()
-        # ica.apply(reconst_raw)
-        #
-        # reconst_raw.plot(show_scrollbars=False)
-        # exit(1)
+
+        # plot ICs applied to raw data, with EOG matches highlighted
+        ica.plot_sources(self.raw)
+
+        reconst_raw = self.raw.copy()
+        ica.apply(reconst_raw)
+
+        reconst_raw.plot()
 
     def define_epochs_raw(self, visualize=True, only_manipulation=True, rois=True):
         """
@@ -355,11 +296,16 @@ class EEGAnalysis:
                                eog=1e-3)  # 1 mV
 
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping, preload=True,
-                                 baseline=(t_min, 0),
+                                 # baseline=(None, t_min),
                                  reject=reject_criteria,
                                  tmin=t_min, tmax=t_max)
 
-        self.epochs = self.epochs.apply_baseline((t_min, t_max))
+        print('\nApplying baseline')
+        new_epochs = self.epochs.apply_baseline((t_min, None))
+        rois_numbers = self.define_rois()
+        for condition in self.event_mapping.keys():
+            # epoch = self.epochs[condition].apply_baseline((None, t_min))
+            self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers, show=True)
 
         if visualize:
             self.visualize_epochs(signal=True, topo_plot=False, conditional_epoch=True, rois=rois)
@@ -401,19 +347,17 @@ class EEGAnalysis:
             img.savefig(self.file_info['output_folder'] + '/' + condition + '_topography.png')
             plt.close(img)
 
-        # frequencies = np.arange(5, 40, 2)
-        # power = mne.time_frequency.tfr_morlet(self.epochs, freqs=frequencies, n_cycles=1, use_fft=True,
-        #                                       return_itc=False, decim=2, n_jobs=1, average=False)
-        #
-        # for condition in self.event_mapping.keys():
-        #     rois_numbers = self.define_rois()
-        #     rois_names = list(rois_numbers.keys())
-        #
-        #     images = power[condition].average().plot(mode='mean', show=False)
+        frequencies = np.arange(10, 30, 3)
+        power = mne.time_frequency.tfr_morlet(self.epochs, freqs=frequencies, n_cycles=5, use_fft=True,
+                                              return_itc=False, decim=3, average=False)
 
-            # for idx, img in enumerate(images):
-            #     img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + rois_names[idx] + '_freq.png')
-            #     plt.close(img)
+        for condition in self.event_mapping.keys():
+
+            images = power[condition].average().plot(mode='mean', show=False)
+
+            for idx, img in enumerate(images):
+                img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + self.raw.ch_names[idx] + '_freq.png')
+                plt.close(img)
 
     def define_rois(self):
 
@@ -432,6 +376,17 @@ class EEGAnalysis:
         )
 
         return rois_numbers
+
+    def define_evoked(self):
+
+        rois_numbers = self.define_rois()
+
+        evoked = {}
+        for condition in self.event_mapping.keys():
+            evoked[condition] = self.epochs[condition].average()
+            roi_evoked = mne.channels.combine_channels(evoked[condition], rois_numbers, method='mean')
+            roi_evoked.plot()
+            exit(1)
 
     def plot_mean_epochs(self):
 
