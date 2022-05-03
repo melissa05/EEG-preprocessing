@@ -302,13 +302,13 @@ class EEGAnalysis:
 
         print('\nApplying baseline')
         new_epochs = self.epochs.apply_baseline((t_min, None))
-        rois_numbers = self.define_rois()
-        for condition in self.event_mapping.keys():
-            # epoch = self.epochs[condition].apply_baseline((None, t_min))
-            self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers, show=True)
+        # rois_numbers = self.define_rois()
+        # for condition in self.event_mapping.keys():
+        #     # epoch = self.epochs[condition].apply_baseline((None, t_min))
+        #     self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers, show=True)
 
         if visualize:
-            self.visualize_epochs(signal=True, topo_plot=False, conditional_epoch=True, rois=rois)
+            self.visualize_epochs(signal=False, topo_plot=False, conditional_epoch=True, rois=rois)
 
     def visualize_epochs(self, signal=True, topo_plot=True, conditional_epoch=True, rois=True):
         """
@@ -317,8 +317,6 @@ class EEGAnalysis:
         :param conditional_epoch: boolean, if visualize the epochs extracted from the events
         :param rois: boolean (only if conditional_epoch=True), if visualize the epochs according to the rois or not
         """
-
-        viz_scaling = dict(eeg=1e-4, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
 
         self.visualize_raw(signal=signal, psd=False, psd_topo=False)
 
@@ -333,14 +331,17 @@ class EEGAnalysis:
                 for condition in self.event_mapping.keys():
                     images = self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers,
                                                                # vmin=-6e-9, vmax=6e-9,
-                                                               scalings=viz_scaling, show=False)
+                                                               # scalings=viz_scaling,
+                                                               show=False)
 
                     for idx, img in enumerate(images):
                         img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + rois_names[idx] + '.png')
                         plt.close(img)
             else:
                 for condition in self.event_mapping.keys():
-                    self.epochs[condition].plot_image(scalings=viz_scaling, show=False)
+                    self.epochs[condition].plot_image(show=False)
+
+        plt.close('all')
 
         for condition in self.event_mapping.keys():
             img = self.epochs[condition].plot_psd_topomap(vlim=(7, 45), show=False)
@@ -357,7 +358,9 @@ class EEGAnalysis:
 
             for idx, img in enumerate(images):
                 img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + self.raw.ch_names[idx] + '_freq.png')
-                plt.close(img)
+            plt.close('all')
+
+        plt.close('all')
 
     def define_rois(self):
 
@@ -386,13 +389,12 @@ class EEGAnalysis:
             evoked[condition] = self.epochs[condition].average()
             roi_evoked = mne.channels.combine_channels(evoked[condition], rois_numbers, method='mean')
             roi_evoked.plot()
-            exit(1)
 
     def plot_mean_epochs(self):
 
         epochs = self.get_epochs_dataframe()
         conditions = epochs.iloc[:]['condition'].tolist()
-        conditions = list(set(conditions))
+        conditions = sorted(list(set(conditions)))
 
         x_axis = epochs.iloc[:]['time'].tolist()
         x_axis = np.sort(np.array(list(set(x_axis))))
@@ -415,7 +417,7 @@ class EEGAnalysis:
                 current_epoch = condition_epochs.loc[condition_epochs['epoch'] == epoch_number, :].values[:, 3:-2]
                 current_epoch = np.array(current_epoch).T
 
-                for roi in rois_numbers.keys():
+                for roi in sorted(rois_numbers.keys()):
 
                     # signals of the current epoch and in the current roi: #channels (in ROI) x #number samples
                     current_roi_epoch = current_epoch[rois_numbers[roi]]
@@ -456,6 +458,7 @@ class EEGAnalysis:
 
             ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
             ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
+            ax.vlines(300, ymin=min_value, ymax=max_value, colors='g', linestyles='dashed')
             ax.set_title(condition)
 
         plt.legend(bbox_to_anchor=(1.2, 2))
@@ -476,6 +479,7 @@ class EEGAnalysis:
 
             ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
             ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
+            ax.vlines(300, ymin=min_value, ymax=max_value, colors='g', linestyles='dashed')
 
             ax.set_title(roi)
 

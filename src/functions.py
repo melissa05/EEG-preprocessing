@@ -53,11 +53,21 @@ def derive_conditions_rois(labels):
 
 
 def plot_mean_epochs(mean_signals, conditions, rois):
-    plt.close()
+
+    conditions = sorted(conditions)
+    rois = sorted(rois)
+
     x_axis = list(range(-200, 802, 2))
 
     fig, axs = plt.subplots(3, 2, figsize=(25.6, 19.2))
     path = '../images/epochs/manipulations.png'
+
+    min_value = np.inf
+    max_value = -np.inf
+
+    for _, array in mean_signals.items():
+        min_value = min(min_value, min(array))
+        max_value = max(max_value, max(array))
 
     for i, ax in enumerate(fig.axes):
 
@@ -65,16 +75,12 @@ def plot_mean_epochs(mean_signals, conditions, rois):
         correct_labels = [s for s in mean_signals.keys() if condition + '/' in s]
         correct_short_labels = [s.split('/')[1] for s in correct_labels]
 
-        min_value = np.inf
-        max_value = -np.inf
-
         for idx, label in enumerate(correct_labels):
             ax.plot(x_axis, mean_signals[label].T, label=correct_short_labels[idx])
-            min_value = min(min_value, min(mean_signals[label]))
-            max_value = max(max_value, max(mean_signals[label]))
 
         ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
         ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
+        ax.vlines(300, ymin=min_value, ymax=max_value, colors='g', linestyles='dashed')
 
         ax.set_title(condition)
 
@@ -92,16 +98,12 @@ def plot_mean_epochs(mean_signals, conditions, rois):
         correct_labels = [s for s in mean_signals.keys() if '/' + roi in s]
         correct_short_labels = [s.split('/')[0] for s in correct_labels]
 
-        min_value = np.inf
-        max_value = -np.inf
-
         for idx, label in enumerate(correct_labels):
             ax.plot(x_axis, mean_signals[label].T, label=correct_short_labels[idx])
-            min_value = min(min_value, min(mean_signals[label]))
-            max_value = max(max_value, max(mean_signals[label]))
 
         ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
         ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
+        ax.vlines(300, ymin=min_value, ymax=max_value, colors='g', linestyles='dashed')
 
         ax.set_title(roi)
 

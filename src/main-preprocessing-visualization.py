@@ -1,5 +1,9 @@
 import sys
 import tkinter
+from importlib import reload
+
+import matplotlib
+
 from EEGAnalysis import *
 from functions import *
 
@@ -18,6 +22,9 @@ def get_path():
 
 if __name__ == '__main__':
 
+    # reload(matplotlib)
+    # matplotlib.use('Agg')
+
     # path = get_path()
     paths = ['../data/eeg/subj_jomo20_block1.xdf', '../data/eeg/subj_mama13_block1.xdf',
              '../data/eeg/subj_moob25_block1.xdf']
@@ -30,15 +37,20 @@ if __name__ == '__main__':
     signals_means = {}
 
     for path in paths:
+
+        plt.close('all')
+
         eeg = EEGAnalysis(path)
         eeg.create_raw()
         # eeg.visualize_raw()
+
         eeg.filter_raw()
         eeg.set_reference()
         eeg.ica_remove_eog()
         # eeg.visualize_raw()
+
         eeg.define_epochs_raw(visualize=True)
-        eeg.define_evoked()
+        # eeg.define_evoked()
 
         means = eeg.plot_mean_epochs()
         for key in means.keys():
@@ -46,6 +58,8 @@ if __name__ == '__main__':
                 signals_means[key] = np.concatenate((signals_means[key], np.array([means[key]])), axis=0)
             else:
                 signals_means[key] = np.array([means[key]])
+
+        plt.close('all')
 
     for key in signals_means.keys():
         signals_means[key] = np.mean(signals_means[key], axis=0)
