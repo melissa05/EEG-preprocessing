@@ -46,11 +46,11 @@ if __name__ == '__main__':
 
         eeg.filter_raw()
         eeg.set_reference()
-        eeg.ica_remove_eog()
+        # eeg.ica_remove_eog()
         # eeg.visualize_raw()
 
         eeg.define_epochs_raw(visualize=True)
-        # eeg.define_evoked()
+        eeg.define_evoked()
 
         means = eeg.plot_mean_epochs()
         for key in means.keys():

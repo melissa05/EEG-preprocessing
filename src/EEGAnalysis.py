@@ -35,6 +35,7 @@ class EEGAnalysis:
 
         self.length = self.eeg_instants.shape[0]
 
+        self.evoked_rois = {}
         self.info, self.raw, self.events, self.event_mapping, self.epochs, self.annotations = None, None, None, None, None, None
 
     def get_info_from_path(self):
@@ -297,15 +298,10 @@ class EEGAnalysis:
 
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping, preload=True,
                                  # baseline=(None, t_min),
-                                 reject=reject_criteria,
-                                 tmin=t_min, tmax=t_max)
+                                 reject=reject_criteria, tmin=t_min, tmax=t_max)
 
         print('\nApplying baseline')
-        new_epochs = self.epochs.apply_baseline((t_min, None))
-        # rois_numbers = self.define_rois()
-        # for condition in self.event_mapping.keys():
-        #     # epoch = self.epochs[condition].apply_baseline((None, t_min))
-        #     self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers, show=True)
+        self.epochs = self.epochs.apply_baseline((t_min, None))
 
         if visualize:
             self.visualize_epochs(signal=False, topo_plot=False, conditional_epoch=True, rois=rois)
@@ -320,14 +316,14 @@ class EEGAnalysis:
 
         self.visualize_raw(signal=signal, psd=False, psd_topo=False)
 
+        rois_numbers = self.define_rois()
+        rois_names = list(rois_numbers.keys())
+
         if topo_plot:
             self.epochs.plot_psd_topomap()
 
         if conditional_epoch:
             if rois:
-                rois_numbers = self.define_rois()
-                rois_names = list(rois_numbers.keys())
-
                 for condition in self.event_mapping.keys():
                     images = self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers,
                                                                # vmin=-6e-9, vmax=6e-9,
@@ -348,16 +344,18 @@ class EEGAnalysis:
             img.savefig(self.file_info['output_folder'] + '/' + condition + '_topography.png')
             plt.close(img)
 
-        frequencies = np.arange(10, 30, 3)
-        power = mne.time_frequency.tfr_morlet(self.epochs, freqs=frequencies, n_cycles=5, use_fft=True,
+        frequencies = np.arange(8, 50, 3)
+        combined_epochs = mne.channels.combine_channels(self.epochs, rois_numbers)
+
+        power = mne.time_frequency.tfr_morlet(combined_epochs, freqs=frequencies, n_cycles=5, use_fft=True,
                                               return_itc=False, decim=3, average=False)
 
-        for condition in self.event_mapping.keys():
+        for idx, condition in enumerate(self.event_mapping.keys()):
 
-            images = power[condition].average().plot(mode='mean', show=False)
+            images = power[idx].average().plot(mode='mean', show=False)
 
-            for idx, img in enumerate(images):
-                img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + self.raw.ch_names[idx] + '_freq.png')
+            for index, img in enumerate(images):
+                img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + list(rois_numbers.keys())[index] + '_freq.png')
             plt.close('all')
 
         plt.close('all')
@@ -384,11 +382,12 @@ class EEGAnalysis:
 
         rois_numbers = self.define_rois()
 
-        evoked = {}
-        for condition in self.event_mapping.keys():
-            evoked[condition] = self.epochs[condition].average()
-            roi_evoked = mne.channels.combine_channels(evoked[condition], rois_numbers, method='mean')
-            roi_evoked.plot()
+        evoked = self.epochs.average(picks=['eeg'], by_event_type=True)
+
+        for evok in evoked:
+
+            roi_evoked = mne.channels.combine_channels(evok, rois_numbers, method='mean')
+            self.evoked_rois[evok.comment] = roi_evoked
 
     def plot_mean_epochs(self):
 
