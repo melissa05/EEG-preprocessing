@@ -5,6 +5,7 @@ import mne
 import numpy as np
 import pyxdf
 from matplotlib import pyplot as plt
+from matplotlib.colors import TwoSlopeNorm
 
 
 class EEGAnalysis:
@@ -205,7 +206,7 @@ class EEGAnalysis:
 
         if signal:
             mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=50)
-            plt.close()
+            # plt.close()
         if psd:
             self.raw.plot_psd()
             plt.close()
@@ -228,30 +229,33 @@ class EEGAnalysis:
         eeg_raw = self.raw.copy()
         eeg_raw = eeg_raw.pick_types(eeg=True)
 
-        ica = mne.preprocessing.ICA(n_components=0.95, method='fastica', random_state=0)
-        eeg_raw.load_data()
+        ica = mne.preprocessing.ICA(n_components=0.99999, method='fastica', random_state=97)
+
         ica.fit(eeg_raw)
         ica.plot_sources(eeg_raw)
         ica.plot_components()
         # ica.plot_properties(eeg_raw)
 
         # find which ICs match the EOG pattern
-        eog_indices, eog_scores = ica.find_bads_eog(self.raw)
-        ica.exclude = eog_indices
+        eog_indices, eog_scores = ica.find_bads_eog(self.raw, h_freq=5, threshold=3)
+        print(eog_indices)
 
-        # barplot of ICA component "EOG match" scores
-        ica.plot_scores(eog_scores)
+        ica.exclude = ica.exclude + eog_indices
 
-        # plot diagnostics
-        # ica.plot_properties(self.raw, picks=eog_indices)
-
-        # plot ICs applied to raw data, with EOG matches highlighted
-        ica.plot_sources(self.raw)
+        # # barplot of ICA component "EOG match" scores
+        # ica.plot_scores(eog_scores)
+        # # plot diagnostics
+        # # ica.plot_properties(self.raw, picks=eog_indices)
+        # # plot ICs applied to raw data, with EOG matches highlighted
+        # ica.plot_sources(eeg_raw)
 
         reconst_raw = self.raw.copy()
         ica.apply(reconst_raw)
 
-        reconst_raw.plot()
+        # viz_scaling = dict(eeg=1e-4, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
+        # reconst_raw.plot(scalings=viz_scaling)
+        # reconst_raw.plot_psd()
+        self.raw = reconst_raw
 
     def define_epochs_raw(self, visualize=True, only_manipulation=True, rois=True):
         """
@@ -377,6 +381,51 @@ class EEGAnalysis:
         )
 
         return rois_numbers
+
+    def define_ers_erd(self):
+        freqs = np.arange(2, 36)  # frequencies from 2-35Hz
+        t_min, t_max = -0.2, 0.8
+        v_min, v_max = -1, 1.5  # set min and max ERDS values in plot
+        baseline = [-0.2, 0]
+
+        cnorm = TwoSlopeNorm(vmin=v_min, vcenter=0, vmax=v_max)  # min, center & max ERDS
+        kwargs = dict(n_permutations=100, step_down_p=0.05, seed=1, buffer_size=None, out_type='mask')
+
+        tfr = mne.time_frequency.tfr_multitaper(self.epochs, freqs=freqs, n_cycles=freqs, use_fft=True,
+                                                return_itc=False, average=False, decim=2)
+        tfr.crop(t_min, t_max).apply_baseline(baseline, mode="percent")
+
+        for event in event_ids:
+            # select desired epochs for visualization
+            tfr_ev = tfr[event]
+            fig, axes = plt.subplots(1, 4, figsize=(12, 4),
+                                     gridspec_kw={"width_ratios": [10, 10, 10, 1]})
+            for ch, ax in enumerate(axes[:-1]):  # for each channel
+                # positive clusters
+                _, c1, p1, _ = pcluster_test(tfr_ev.data[:, ch], tail=1, **kwargs)
+                # negative clusters
+                _, c2, p2, _ = pcluster_test(tfr_ev.data[:, ch], tail=-1, **kwargs)
+
+                # note that we keep clusters with p <= 0.05 from the combined clusters
+                # of two independent tests; in this example, we do not correct for
+                # these two comparisons
+                c = np.stack(c1 + c2, axis=2)  # combined clusters
+                p = np.concatenate((p1, p2))  # combined p-values
+                mask = c[..., p <= 0.05].any(axis=-1)
+
+                # plot TFR (ERDS map with masking)
+                tfr_ev.average().plot([ch], cmap="RdBu", cnorm=cnorm, axes=ax,
+                                      colorbar=False, show=False, mask=mask,
+                                      mask_style="mask")
+
+                ax.set_title(epochs.ch_names[ch], fontsize=10)
+                ax.axvline(0, linewidth=1, color="black", linestyle=":")  # event
+                if ch != 0:
+                    ax.set_ylabel("")
+                    ax.set_yticklabels("")
+            fig.colorbar(axes[0].images[-1], cax=axes[-1]).ax.set_yscale("linear")
+            fig.suptitle(f"ERDS ({event})")
+            plt.show()
 
     def define_evoked(self):
 
