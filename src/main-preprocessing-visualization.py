@@ -47,7 +47,7 @@ if __name__ == '__main__':
 
         eeg.set_reference()
         eeg.filter_raw()
-        eeg.ica_remove_eog()
+        # eeg.ica_remove_eog()
         # eeg.visualize_raw()
 
         eeg.define_epochs_raw(visualize=True)

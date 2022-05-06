@@ -6,6 +6,7 @@ import numpy as np
 import pyxdf
 from matplotlib import pyplot as plt
 from matplotlib.colors import TwoSlopeNorm
+from mne.stats import permutation_cluster_1samp_test as pcluster_test
 
 
 class EEGAnalysis:
@@ -392,19 +393,23 @@ class EEGAnalysis:
         kwargs = dict(n_permutations=100, step_down_p=0.05, seed=1, buffer_size=None, out_type='mask')
 
         tfr = mne.time_frequency.tfr_multitaper(self.epochs, freqs=freqs, n_cycles=freqs, use_fft=True,
-                                                return_itc=False, average=False, decim=2)
-        tfr.crop(t_min, t_max).apply_baseline(baseline, mode="percent")
+                                                return_itc=False, average=False, decim=4)
+        # tfr.crop(t_min, t_max).apply_baseline(baseline, mode="percent")
 
-        for event in event_ids:
+        for event in self.event_mapping:
             # select desired epochs for visualization
             tfr_ev = tfr[event]
-            fig, axes = plt.subplots(1, 4, figsize=(12, 4),
-                                     gridspec_kw={"width_ratios": [10, 10, 10, 1]})
+            print(tfr_ev)
+            fig, axes = plt.subplots(1, 4, figsize=(12, 4), gridspec_kw={"width_ratios": [10, 10, 10, 1]})
+            print(axes)
             for ch, ax in enumerate(axes[:-1]):  # for each channel
+                print(len(axes[:-1]))
                 # positive clusters
                 _, c1, p1, _ = pcluster_test(tfr_ev.data[:, ch], tail=1, **kwargs)
                 # negative clusters
                 _, c2, p2, _ = pcluster_test(tfr_ev.data[:, ch], tail=-1, **kwargs)
+
+                print(c1, p1, c2, p2)
 
                 # note that we keep clusters with p <= 0.05 from the combined clusters
                 # of two independent tests; in this example, we do not correct for
@@ -418,7 +423,7 @@ class EEGAnalysis:
                                       colorbar=False, show=False, mask=mask,
                                       mask_style="mask")
 
-                ax.set_title(epochs.ch_names[ch], fontsize=10)
+                ax.set_title(self.epochs.ch_names[ch], fontsize=10)
                 ax.axvline(0, linewidth=1, color="black", linestyle=":")  # event
                 if ch != 0:
                     ax.set_ylabel("")
