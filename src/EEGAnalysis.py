@@ -5,8 +5,9 @@ import mne
 import numpy as np
 import pyxdf
 from matplotlib import pyplot as plt
-from matplotlib.colors import TwoSlopeNorm
-from mne.stats import permutation_cluster_1samp_test as pcluster_test
+import seaborn as sns
+
+from src.functions import square_epochs
 
 
 class EEGAnalysis:
@@ -117,7 +118,7 @@ class EEGAnalysis:
             final_count += int(lost[0].split(': ')[1])
         print('Number of samples with lost samples integration: ', final_count)
 
-        total_time = len(self.eeg_instants)/effective_sample_frequency
+        total_time = len(self.eeg_instants) / effective_sample_frequency
         real_number_samples = total_time * self.eeg_fs
         print('Number of samples with real sampling frequency: ', real_number_samples)
 
@@ -140,7 +141,7 @@ class EEGAnalysis:
             missing_samples = int(orn_signal[idx][0].split(': ')[1])
             additional_time = missing_samples / self.eeg_fs
 
-            new_marker_signal[(x+1):] = np.array(new_marker_signal[(x+1):]) + additional_time
+            new_marker_signal[(x + 1):] = np.array(new_marker_signal[(x + 1):]) + additional_time
 
     def load_channels(self, dict_channels):
         """
@@ -294,8 +295,8 @@ class EEGAnalysis:
 
         # generation of the epochs according to the events
 
-        t_min = -0.2  # start of each epoch (200ms before the trigger)
-        t_max = 0.8  # end of each epoch (800ms after the trigger)
+        t_min = -0.5  # start of each epoch (200ms before the trigger)
+        t_max = 1  # end of each epoch (800ms after the trigger)
 
         # Automatic rejection criteria: reject epochs based on maximum peak-to-peak signal amplitude (PTP)
         reject_criteria = dict(eeg=200e-6,  # 200 µV
@@ -360,7 +361,8 @@ class EEGAnalysis:
             images = power[idx].average().plot(mode='mean', show=False)
 
             for index, img in enumerate(images):
-                img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + list(rois_numbers.keys())[index] + '_freq.png')
+                img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + list(rois_numbers.keys())[
+                    index] + '_freq.png')
             plt.close('all')
 
         plt.close('all')
@@ -383,54 +385,51 @@ class EEGAnalysis:
 
         return rois_numbers
 
-    def define_ers_erd(self):
-        freqs = np.arange(2, 36)  # frequencies from 2-35Hz
-        t_min, t_max = -0.2, 0.8
-        v_min, v_max = -1, 1.5  # set min and max ERDS values in plot
-        baseline = [-0.2, 0]
+    def define_ers_erd(self, f_min=1, f_max=30):
 
-        cnorm = TwoSlopeNorm(vmin=v_min, vcenter=0, vmax=v_max)  # min, center & max ERDS
-        kwargs = dict(n_permutations=100, step_down_p=0.05, seed=1, buffer_size=None, out_type='mask')
+        rois_numbers = self.define_rois()
+        freqs = list(range(f_min, f_max + 1, 5))
 
-        tfr = mne.time_frequency.tfr_multitaper(self.epochs, freqs=freqs, n_cycles=freqs, use_fft=True,
-                                                return_itc=False, average=False, decim=4)
-        # tfr.crop(t_min, t_max).apply_baseline(baseline, mode="percent")
+        epochs = self.epochs.copy()
 
-        for event in self.event_mapping:
-            # select desired epochs for visualization
-            tfr_ev = tfr[event]
-            print(tfr_ev)
-            fig, axes = plt.subplots(1, 4, figsize=(12, 4), gridspec_kw={"width_ratios": [10, 10, 10, 1]})
-            print(axes)
-            for ch, ax in enumerate(axes[:-1]):  # for each channel
-                print(len(axes[:-1]))
-                # positive clusters
-                _, c1, p1, _ = pcluster_test(tfr_ev.data[:, ch], tail=1, **kwargs)
-                # negative clusters
-                _, c2, p2, _ = pcluster_test(tfr_ev.data[:, ch], tail=-1, **kwargs)
+        for condition in self.event_mapping.keys():
 
-                print(c1, p1, c2, p2)
+            # extract epochs of interest
+            condition_epochs = epochs[condition]
 
-                # note that we keep clusters with p <= 0.05 from the combined clusters
-                # of two independent tests; in this example, we do not correct for
-                # these two comparisons
-                c = np.stack(c1 + c2, axis=2)  # combined clusters
-                p = np.concatenate((p1, p2))  # combined p-values
-                mask = c[..., p <= 0.05].any(axis=-1)
+            for roi, roi_numbers in rois_numbers.items():
+                condition_roi_epochs = condition_epochs.copy()
+                condition_roi_epochs = condition_roi_epochs.pick(roi_numbers)
 
-                # plot TFR (ERDS map with masking)
-                tfr_ev.average().plot([ch], cmap="RdBu", cnorm=cnorm, axes=ax,
-                                      colorbar=False, show=False, mask=mask,
-                                      mask_style="mask")
+                freq_erds_results = []
 
-                ax.set_title(self.epochs.ch_names[ch], fontsize=10)
-                ax.axvline(0, linewidth=1, color="black", linestyle=":")  # event
-                if ch != 0:
-                    ax.set_ylabel("")
-                    ax.set_yticklabels("")
-            fig.colorbar(axes[0].images[-1], cax=axes[-1]).ax.set_yscale("linear")
-            fig.suptitle(f"ERDS ({event})")
-            plt.show()
+                for idx, start in enumerate(freqs[:-1]):
+                    condition_roi_filtered_epochs = condition_roi_epochs.filter(start, freqs[idx + 1])
+
+                    # square epochs to derive power approximation
+                    condition_roi_filtered_epochs = condition_roi_filtered_epochs.apply_function(square_epochs)
+                    condition_roi_filtered_epochs = condition_roi_filtered_epochs.average()
+                    condition_roi_filtered_epochs = mne.channels.combine_channels(condition_roi_filtered_epochs,
+                                                                                  groups={'mean': list(range(len(condition_roi_filtered_epochs.get_channel_types())))})
+
+                    reference = condition_roi_filtered_epochs.copy()
+                    reference = reference.crop(-0.5, 0)
+                    reference_power = np.mean(reference.get_data() * 1e6)
+
+                    print(reference_power)
+
+                    erds = np.array((condition_roi_filtered_epochs.get_data() * 1e6 - reference_power) / reference_power * 100)[0]
+                    freq_erds_results.append(erds)
+
+                freq_erds_results = np.array(freq_erds_results)
+                print(freq_erds_results)
+
+                x_axis = range(-500, 1001, 2)
+
+                # convert to dataframe to have correct labeling
+                sns.heatmap(freq_erds_results, cmap="Spectral", center=0)
+                plt.show()
+                exit(1)
 
     def define_evoked(self):
 
@@ -439,7 +438,6 @@ class EEGAnalysis:
         evoked = self.epochs.average(picks=['eeg'], by_event_type=True)
 
         for evok in evoked:
-
             roi_evoked = mne.channels.combine_channels(evok, rois_numbers, method='mean')
             self.evoked_rois[evok.comment] = roi_evoked
 

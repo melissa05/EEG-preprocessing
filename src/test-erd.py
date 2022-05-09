@@ -9,7 +9,7 @@ from mne.io import concatenate_raws, read_raw_edf
 from mne.time_frequency import tfr_multitaper
 from mne.stats import permutation_cluster_1samp_test as pcluster_test
 
-fnames = eegbci.load_data(subject=1, runs=(6, 10, 14))
+fnames = eegbci.load_data(subject=1, runs=[6, 10, 14])
 raw = concatenate_raws([read_raw_edf(f, preload=True) for f in fnames])
 
 raw.rename_channels(lambda x: x.strip('.'))  # remove dots from channel names

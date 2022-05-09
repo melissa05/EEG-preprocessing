@@ -53,7 +53,6 @@ def derive_conditions_rois(labels):
 
 
 def plot_mean_epochs(mean_signals, conditions, rois):
-
     conditions = sorted(conditions)
     rois = sorted(rois)
 
@@ -139,3 +138,7 @@ def plot_distribution(array_data, path):
     plt.title((path.rsplit('.', 1)[0]).rsplit('/', 1)[1])
     plt.savefig(path)
     plt.close()
+
+
+def square_epochs(array_data):
+    return np.square(array_data)
