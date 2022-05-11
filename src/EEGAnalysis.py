@@ -3,11 +3,10 @@ from pathlib import Path
 
 import mne
 import numpy as np
+import pandas as pd
 import pyxdf
 from matplotlib import pyplot as plt
 import seaborn as sns
-
-from src.functions import square_epochs
 
 
 class EEGAnalysis:
@@ -40,6 +39,9 @@ class EEGAnalysis:
 
         self.evoked_rois = {}
         self.info, self.raw, self.events, self.event_mapping, self.epochs, self.annotations = None, None, None, None, None, None
+
+        self.t_min = -0.5  # start of each epoch (200ms before the trigger)
+        self.t_max = 1  # end of each epoch (800ms after the trigger)
 
     def get_info_from_path(self):
         """
@@ -259,16 +261,12 @@ class EEGAnalysis:
         # reconst_raw.plot_psd()
         self.raw = reconst_raw
 
-    def define_epochs_raw(self, visualize=True, only_manipulation=True, rois=True):
+    def define_annotations(self, only_manipulation=True):
         """
-        Function to extract events from the marker data, generate the correspondent epochs and determine annotation in
-        the raw data according to the events
-        :param visualize:
         :param only_manipulation: boolean variable to select to manipulate epochs only according to the image
         manipulation type or according to the whole trigger (img_name/manipulation)
-        :param rois: boolean variable to select if visualize results in terms to rois or not
+        :return:
         """
-
         # generation of the events according to the definition
         triggers = {'onsets': [], 'duration': [], 'description': []}
 
@@ -289,25 +287,27 @@ class EEGAnalysis:
                 triggers['description'].append(marker_data[0])
 
         self.annotations = mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description'])
-        self.raw.set_annotations(self.annotations)
 
+    def define_epochs_raw(self, visualize=True, rois=True):
+        """
+        Function to extract events from the marker data, generate the correspondent epochs and determine annotation in
+        the raw data according to the events
+        :param visualize:
+        :param rois: boolean variable to select if visualize results in terms to rois or not
+        """
+
+        self.raw.set_annotations(self.annotations)
         self.events, self.event_mapping = mne.events_from_annotations(self.raw)
 
         # generation of the epochs according to the events
-
-        t_min = -0.5  # start of each epoch (200ms before the trigger)
-        t_max = 1  # end of each epoch (800ms after the trigger)
 
         # Automatic rejection criteria: reject epochs based on maximum peak-to-peak signal amplitude (PTP)
         reject_criteria = dict(eeg=200e-6,  # 200 µV
                                eog=1e-3)  # 1 mV
 
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping, preload=True,
-                                 # baseline=(None, t_min),
-                                 reject=reject_criteria, tmin=t_min, tmax=t_max)
-
-        print('\nApplying baseline')
-        self.epochs = self.epochs.apply_baseline((t_min, None))
+                                 baseline=(self.t_min, 0),
+                                 reject=reject_criteria, tmin=self.t_min, tmax=self.t_max)
 
         if visualize:
             self.visualize_epochs(signal=False, topo_plot=False, conditional_epoch=True, rois=rois)
@@ -385,18 +385,70 @@ class EEGAnalysis:
 
         return rois_numbers
 
-    def define_ers_erd(self, f_min=1, f_max=30):
+    def define_ers_erd(self, f_min=1, f_max=35, f_step=5):
+
+        def square_epochs(array_data):
+            return np.square(array_data)
 
         rois_numbers = self.define_rois()
-        freqs = list(range(f_min, f_max + 1, 5))
+        freqs = list(range(f_min, f_max + 1, f_step))
 
-        epochs = self.epochs.copy()
+        signals = self.raw.copy()
+        filter_bank = []
+        for idx, start in enumerate(freqs[:-1]):
+            filtered_signals = signals.filter(start, freqs[idx + 1])
+            filtered_signals.set_annotations(self.annotations)
+            events, event_mapping = mne.events_from_annotations(self.raw)
+
+            reject_criteria = dict(eeg=200e-6, eog=1e-3)
+
+            epochs = mne.Epochs(filtered_signals, events, self.event_mapping, preload=True, baseline=(self.t_min, 0),
+                                reject=reject_criteria, tmin=self.t_min, tmax=self.t_max)
+
+            filter_bank.append(epochs)
+
+        print(filter_bank)
 
         for condition in self.event_mapping.keys():
 
+            for roi, roi_numbers in rois_numbers.items():
+
+                freq_erds_results = []
+
+                for freq_band_epochs in filter_bank:
+                    condition_epochs = freq_band_epochs[condition].copy()
+                    condition_epochs = condition_epochs.pick(roi_numbers)
+                    condition_epochs = condition_epochs.apply_function(square_epochs)
+
+                    print(condition_epochs)
+
+                    condition_epochs = condition_epochs.average()
+                    condition_epochs = mne.channels.combine_channels(condition_epochs, groups={
+                        'mean': list(range(len(condition_epochs.get_channel_types())))})
+
+                    reference = condition_epochs.copy()
+                    reference = reference.crop(self.t_min, 0)
+                    reference_power = np.mean(reference.get_data())
+
+                    print(reference_power)
+
+                    erds = np.array((condition_epochs.get_data() - reference_power) / reference_power * 100)[0]
+                    freq_erds_results.append(erds)
+
+                    print(erds)
+
+                freq_erds_results = np.array(freq_erds_results)
+                print(freq_erds_results)
+
+                fig, ax = plt.subplots()
+                ax.pcolor(freq_erds_results, cmap=plt.cm.Spectral)
+                ax.set_yticklabels(freqs, minor=False)
+
+                plt.show()
+            exit(1)
+
             # extract epochs of interest
             condition_epochs = epochs[condition]
-
             for roi, roi_numbers in rois_numbers.items():
                 condition_roi_epochs = condition_epochs.copy()
                 condition_roi_epochs = condition_roi_epochs.pick(roi_numbers)
@@ -410,7 +462,8 @@ class EEGAnalysis:
                     condition_roi_filtered_epochs = condition_roi_filtered_epochs.apply_function(square_epochs)
                     condition_roi_filtered_epochs = condition_roi_filtered_epochs.average()
                     condition_roi_filtered_epochs = mne.channels.combine_channels(condition_roi_filtered_epochs,
-                                                                                  groups={'mean': list(range(len(condition_roi_filtered_epochs.get_channel_types())))})
+                                                                                  groups={'mean': list(range(
+                                                                                      len(condition_roi_filtered_epochs.get_channel_types())))})
 
                     reference = condition_roi_filtered_epochs.copy()
                     reference = reference.crop(-0.5, 0)
@@ -418,18 +471,21 @@ class EEGAnalysis:
 
                     print(reference_power)
 
-                    erds = np.array((condition_roi_filtered_epochs.get_data() * 1e6 - reference_power) / reference_power * 100)[0]
+                    erds = np.array(
+                        (condition_roi_filtered_epochs.get_data() * 1e6 - reference_power) / reference_power * 100)[0]
                     freq_erds_results.append(erds)
 
                 freq_erds_results = np.array(freq_erds_results)
                 print(freq_erds_results)
 
-                x_axis = range(-500, 1001, 2)
+                fig, ax = plt.subplots()
+                ax.pcolor(freq_erds_results, cmap=plt.cm.Spectral)
 
-                # convert to dataframe to have correct labeling
-                sns.heatmap(freq_erds_results, cmap="Spectral", center=0)
+                # ax.set_xticklabels(x_axis, minor=False)
+                ax.set_yticklabels(freqs, minor=False)
+
                 plt.show()
-                exit(1)
+            exit(1)
 
     def define_evoked(self):
 

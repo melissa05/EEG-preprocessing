@@ -49,6 +49,7 @@ if __name__ == '__main__':
         # eeg.ica_remove_eog()
         # eeg.visualize_raw()
 
+        eeg.define_annotations()
         eeg.define_epochs_raw(visualize=False)
         eeg.define_ers_erd()
         exit(1)

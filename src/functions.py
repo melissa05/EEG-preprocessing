@@ -139,6 +139,3 @@ def plot_distribution(array_data, path):
     plt.savefig(path)
     plt.close()
 
-
-def square_epochs(array_data):
-    return np.square(array_data)
