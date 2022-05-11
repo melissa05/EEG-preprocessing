@@ -56,7 +56,7 @@ def plot_mean_epochs(mean_signals, conditions, rois):
     conditions = sorted(conditions)
     rois = sorted(rois)
 
-    x_axis = list(range(-200, 802, 2))
+    x_axis = list(range(-500, 1002, 2))
 
     fig, axs = plt.subplots(3, 2, figsize=(25.6, 19.2))
     path = '../images/epochs/manipulations.png'

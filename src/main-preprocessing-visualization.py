@@ -1,37 +1,33 @@
 import sys
 import tkinter
-from importlib import reload
-
-import matplotlib
 
 from EEGAnalysis import *
 from functions import *
 
 
-def get_path():
-    if 'tkinter' in sys.modules:
-        from tkinter import filedialog
-        path_selected = filedialog.askopenfilename(initialdir=os.getcwd(), title="Select a File",
-                                                   filetypes=(("xdf files", "*.xdf*"),))
-    else:
-        path_selected = input(
-            "Not able to use tkinter to select the file. Insert here the file path and press ENTER:\n")
-
-    return path_selected
-
-
 if __name__ == '__main__':
 
-    # reload(matplotlib)
-    # matplotlib.use('Agg')
-
-    # path = get_path()
-    paths = ['../data/eeg/subj_moob25_block1.xdf']
+    paths = ['../data/eeg/subj_jomo20_block1.xdf', '../data/eeg/subj_mama13_block1.xdf',
+             '../data/eeg/subj_moob25_block1.xdf', '../data/eeg/subj_vamo24_block1.xdf']
 
     # ['../data/eeg/subj_maba09_block1.xdf', '../data/eeg/subj_soze31_block1.xdf',
     # '../data/eeg/subj_nipe10_block1.xdf', '../data/eeg/subj_dino02_block1.xdf']
     # ['../data/eeg/subj_jomo20_block1.xdf', '../data/eeg/subj_mama13_block1.xdf',
     # '../data/eeg/subj_moob25_block1.xdf', '../data/eeg/subj_vamo24_block1.xdf']
+
+    dict_info = {'streams': {'EEGMarkers': 'BrainVision RDA Markers', 'EEGData': 'BrainVision RDA', 'Triggers': 'PsychoPy'},
+                 'filtering': {'low': 1, 'high': 60, 'notch': 50},
+                 'spatial_filtering': 'average',
+                 'samples_remove': 0,
+                 't_min': -0.5,
+                 't_max': 1,
+                 'rois': dict(
+                     central=["Cz", "C3", "C4"],
+                     frontal=["Fz", "Fp1", "F3", "F7", "FC1", "FC2", "F4", "F8", "Fp2"],
+                     occipital_parietal=["O1", "Oz", "O2", "Pz", "P3", "P7", "P4", "P8"],
+                     temporal=["FC6", "FC5", "T7", "T8", "CP5", "CP6", "FT9", "FT10", "TP9", "TP10"],),
+                 'bad_epoch_names': ['intro', 'pause', 'end']
+                 }
 
     signals_means = {}
 
@@ -40,20 +36,8 @@ if __name__ == '__main__':
         plt.close('all')
         print('\n\nAnalyzing file', path)
 
-        eeg = EEGAnalysis(path)
-        eeg.create_raw()
-        # eeg.visualize_raw()
-
-        eeg.set_reference()
-        eeg.filter_raw()
-        # eeg.ica_remove_eog()
-        # eeg.visualize_raw()
-
-        eeg.define_annotations()
-        eeg.define_epochs_raw(visualize=False)
-        eeg.define_ers_erd()
-        exit(1)
-        eeg.define_evoked()
+        eeg = EEGAnalysis(path, dict_info)
+        eeg.run(visualize_raw=False, save_images=False)
 
         means = eeg.plot_mean_epochs()
         for key in means.keys():
