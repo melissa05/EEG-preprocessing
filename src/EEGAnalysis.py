@@ -367,24 +367,30 @@ class EEGAnalysis:
 
         return rois_numbers
 
-    def define_ers_erd(self, f_min=1, f_max=50, f_step=2):
+    def define_ers_erd(self, f_min=1, f_max=30):
 
         def square_epochs(array_data):
             return np.square(array_data)
 
         rois_numbers = self.define_rois()
-        freqs = list(range(f_min, f_max + 1, f_step))
-        x_axis = list(range(-502, 1001, 2))
+
+        x_axis = list(range(int(self.t_min * 1000 - 2), int(self.t_max * 1000 + 1), 2))
+
+        f_start = list(range(f_min, f_max, 1))
+        f_end = list(range(f_min+2, f_max+2, 1))
+        f_plot = list(range(f_min+1, f_max+2, 1))
 
         signals = self.raw.copy()
         filter_bank = []
-        for idx, start in enumerate(freqs[:-1]):
-            filtered_signals = signals.filter(start, freqs[idx + 1])
+
+        for idx, start in enumerate(f_start):
+
+            filtered_signals = signals.filter(start, f_end[idx], l_trans_bandwidth=1, h_trans_bandwidth=1)
+
             filtered_signals.set_annotations(self.annotations)
             events, event_mapping = mne.events_from_annotations(self.raw)
 
             reject_criteria = dict(eeg=200e-6, eog=1e-3)
-
             epochs = mne.Epochs(filtered_signals, events, self.event_mapping, preload=True, baseline=(self.t_min, 0),
                                 reject=reject_criteria, tmin=self.t_min, tmax=self.t_max)
 
@@ -414,7 +420,7 @@ class EEGAnalysis:
                     reference = epochs_data[:, :, :int(self.t_min*self.eeg_fs)]
                     reference_power = np.mean(reference, axis=2)
 
-                    # for each value inside the data, compute the ERDS value
+                    # for each value inside the data, compute the ERDS value -> trial-individual references
                     erds_epochs = []
                     for idx_epoch, epoch in enumerate(epochs_data):
                         for idx_ch, channel in enumerate(epoch):
@@ -433,7 +439,7 @@ class EEGAnalysis:
                 # visualization
                 z_min, z_max = -np.abs(freq_erds_results).max(), np.abs(freq_erds_results).max()
                 fig, ax = plt.subplots()
-                p = ax.pcolor(x_axis, freqs, freq_erds_results, cmap='RdBu', snap=True, vmin=z_min, vmax=z_max)
+                p = ax.pcolor(x_axis, f_plot, freq_erds_results, cmap='RdBu', snap=True, vmin=z_min, vmax=z_max)
                 ax.set_title(condition+' '+roi)
                 ax.axvline(0, color='k')
                 fig.colorbar(p, ax=ax)
@@ -472,7 +478,19 @@ class EEGAnalysis:
         self.define_epochs_raw(visualize=save_images)
         self.define_ers_erd()
 
+    # TODO to be done with evoked
     def plot_mean_epochs(self):
+
+        rois_numbers = self.define_rois()
+
+        for condition in self.event_mapping.keys():
+            condition_epochs = self.epochs[condition]
+
+            for roi in sorted(rois_numbers.keys()):
+                condition_roi_epoch = condition_epochs.copy()
+                condition_roi_epoch = condition_roi_epoch.pick(rois_numbers[roi])
+
+        # ----------------------------------------------------------------
 
         epochs = self.get_epochs_dataframe()
         conditions = epochs.iloc[:]['condition'].tolist()
