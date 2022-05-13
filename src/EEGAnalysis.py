@@ -21,6 +21,7 @@ class EEGAnalysis:
         self.channels_names, self.channels_types, self.evoked_rois = {}, {}, {}
         self.info, self.raw = None, None
         self.events, self.event_mapping, self.epochs, self.annotations = None, None, None, None
+        self.evoked = {}
 
         self.input_info = dict_info
 
@@ -198,7 +199,6 @@ class EEGAnalysis:
     def set_reference(self):
         """
         Resetting the reference in raw data
-        :param ref_type: type of referencing to be performed
         """
 
         mne.set_eeg_reference(self.raw, ref_channels=self.input_info['spatial_filtering'], copy=False)
@@ -206,10 +206,6 @@ class EEGAnalysis:
     def filter_raw(self):
         """
         Filter of MNE raw instance data with a band-pass filter and a notch filter
-        :param l_freq: low frequency of band-pass filter
-        :param h_freq: high frequency of band-pass filter
-        :param n_freq: frequency of notch filter
-        :param order: order of the filter
         """
 
         l_freq = self.input_info['filtering']['low']
@@ -367,10 +363,17 @@ class EEGAnalysis:
 
         return rois_numbers
 
-    def define_ers_erd(self, f_min=1, f_max=30):
+    def define_ers_erd(self):
 
         def square_epochs(array_data):
             return np.square(array_data)
+
+        if len(self.input_info['erds']) != 2:
+            print('No erds frequencies provided!')
+            return
+
+        f_min = int(self.input_info['erds'][0])
+        f_max = int(self.input_info['erds'][1])
 
         rois_numbers = self.define_rois()
 
@@ -440,6 +443,8 @@ class EEGAnalysis:
                 z_min, z_max = -np.abs(freq_erds_results).max(), np.abs(freq_erds_results).max()
                 fig, ax = plt.subplots()
                 p = ax.pcolor(x_axis, f_plot, freq_erds_results, cmap='RdBu', snap=True, vmin=z_min, vmax=z_max)
+                ax.set_xlabel('Time (\u03bcs)')
+                ax.set_ylabel('Frequency (Hz)')
                 ax.set_title(condition+' '+roi)
                 ax.axvline(0, color='k')
                 fig.colorbar(p, ax=ax)
@@ -455,6 +460,79 @@ class EEGAnalysis:
         for evok in evoked:
             roi_evoked = mne.channels.combine_channels(evok, rois_numbers, method='mean')
             self.evoked_rois[evok.comment] = roi_evoked
+
+    def plot_evoked(self):
+
+        rois_numbers = self.define_rois()
+
+        for condition in self.event_mapping.keys():
+            condition_epochs = self.epochs[condition]
+
+            for roi in sorted(rois_numbers.keys()):
+                condition_roi_epoch = condition_epochs.copy()
+                condition_roi_epoch = condition_roi_epoch.pick(rois_numbers[roi])
+
+                condition_roi_epoch = condition_roi_epoch.average()
+                condition_roi_epoch = mne.channels.combine_channels(condition_roi_epoch,
+                                                                    groups={'mean': list(range(len(rois_numbers[roi])))})
+
+                label = condition + '/' + roi
+                self.evoked[label] = condition_roi_epoch
+
+        # get minimum and maximum value of the mean signals
+        min_value, max_value = np.inf, -np.inf
+        for label in self.evoked.keys():
+            data = self.evoked[label].get_data()[0]
+            min_value = min(np.min(data), min_value)
+            max_value = max(np.max(data), max_value)
+
+        # Plot everything
+
+        Path(self.file_info['output_folder'] + '/epochs/').mkdir(parents=True, exist_ok=True)
+
+        fig, axs = plt.subplots(3, 2, figsize=(25.6, 19.2))
+        path = self.file_info['output_folder'] + '/epochs/conditions.png'
+
+        for i, ax in enumerate(fig.axes):
+
+            condition = list(self.event_mapping.keys())[i]
+
+            correct_labels = [s for s in self.evoked.keys() if condition + '/' in s]
+            correct_short_labels = [s.split('/')[1] for s in correct_labels]
+
+            for idx, label in enumerate(correct_labels):
+                ax.plot(self.evoked[label].times*1000, self.evoked[label].get_data()[0], label=correct_short_labels[idx])
+
+            for erp in self.input_info['erp']:
+                ax.vlines(erp, ymin=min_value, ymax=max_value, linestyles='dashed')
+
+            ax.set_title(condition)
+
+        plt.legend(bbox_to_anchor=(1.2, 2))
+        plt.savefig(path)
+        plt.close()
+
+        fig, axs = plt.subplots(2, 2, figsize=(25.6, 19.2))
+        path = self.file_info['output_folder'] + '/epochs/rois.png'
+
+        for i, ax in enumerate(fig.axes):
+            roi = list(rois_numbers.keys())[i]
+
+            correct_labels = [s for s in self.evoked.keys() if '/' + roi in s]
+            correct_short_labels = [s.split('/')[0] for s in correct_labels]
+
+            for idx, label in enumerate(correct_labels):
+                ax.plot(self.evoked[label].times*1000, self.evoked[label].get_data()[0], label=correct_short_labels[idx])
+
+            for erp in self.input_info['erp']:
+                ax.vlines(erp, ymin=min_value, ymax=max_value, linestyles='dashed')
+
+            ax.set_title(roi)
+
+        # TODO remove anchor
+        plt.legend(bbox_to_anchor=(1.2, 1.1))
+        plt.savefig(path)
+        plt.close()
 
     def run(self, visualize_raw=False, save_images=True):
 
@@ -477,137 +555,7 @@ class EEGAnalysis:
         self.define_annotations()
         self.define_epochs_raw(visualize=save_images)
         self.define_ers_erd()
+        self.plot_evoked()
 
-    # TODO to be done with evoked
-    def plot_mean_epochs(self):
-
-        rois_numbers = self.define_rois()
-
-        for condition in self.event_mapping.keys():
-            condition_epochs = self.epochs[condition]
-
-            for roi in sorted(rois_numbers.keys()):
-                condition_roi_epoch = condition_epochs.copy()
-                condition_roi_epoch = condition_roi_epoch.pick(rois_numbers[roi])
-
-        # ----------------------------------------------------------------
-
-        epochs = self.get_epochs_dataframe()
-        conditions = epochs.iloc[:]['condition'].tolist()
-        conditions = sorted(list(set(conditions)))
-
-        x_axis = epochs.iloc[:]['time'].tolist()
-        x_axis = np.sort(np.array(list(set(x_axis))))
-        rois_numbers = self.define_rois()
-
-        means, epoch_signals = {}, {}
-
-        for condition in conditions:
-
-            # epochs belonging only to the current condition
-            condition_epochs = epochs.loc[epochs['condition'] == condition, :]
-
-            # number of the epochs belonging to the current condition
-            number_epochs = condition_epochs.iloc[:]['epoch'].tolist()
-            number_epochs = list(set(number_epochs))
-
-            for epoch_number in number_epochs:
-
-                # current epoch (in current condition), extracted and made as matrix: #channels x #samples
-                current_epoch = condition_epochs.loc[condition_epochs['epoch'] == epoch_number, :].values[:, 3:-2]
-                current_epoch = np.array(current_epoch).T
-
-                for roi in sorted(rois_numbers.keys()):
-
-                    # signals of the current epoch and in the current roi: #channels (in ROI) x #number samples
-                    current_roi_epoch = current_epoch[rois_numbers[roi]]
-
-                    label = condition + '/' + roi
-
-                    # save in a matrix containing all signals coming from same condition and same roi
-                    if label in epoch_signals:
-                        epoch_signals[label] = np.concatenate((epoch_signals[label], current_roi_epoch))
-                    else:
-                        epoch_signals[label] = current_roi_epoch
-
-        # mean of the signals in same condition and same roi
-        for key in epoch_signals:
-            mean_current_epochs = np.mean(epoch_signals[key], axis=0)
-            means[key] = mean_current_epochs
-
-        # get minimum and maximum value of the mean signals
-        min_value, max_value = 100, -100
-        for label in epoch_signals.keys():
-            min_value = min(np.min(means[label]), min_value)
-            max_value = max(np.max(means[label]), max_value)
-
-        Path(self.file_info['output_folder'] + '/epochs/').mkdir(parents=True, exist_ok=True)
-
-        fig, axs = plt.subplots(3, 2, figsize=(25.6, 19.2))
-        path = self.file_info['output_folder'] + '/epochs/conditions.png'
-
-        for i, ax in enumerate(fig.axes):
-
-            condition = conditions[i]
-
-            correct_labels = [s for s in epoch_signals.keys() if condition + '/' in s]
-            correct_short_labels = [s.split('/')[1] for s in correct_labels]
-
-            for idx, label in enumerate(correct_labels):
-                ax.plot(x_axis, means[label], label=correct_short_labels[idx])
-
-            ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
-            ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
-            ax.vlines(300, ymin=min_value, ymax=max_value, colors='g', linestyles='dashed')
-            ax.set_title(condition)
-
-        plt.legend(bbox_to_anchor=(1.2, 2))
-        plt.savefig(path)
-        plt.close()
-
-        fig, axs = plt.subplots(2, 2, figsize=(25.6, 19.2))
-        path = self.file_info['output_folder'] + '/epochs/rois.png'
-
-        for i, ax in enumerate(fig.axes):
-            roi = list(rois_numbers.keys())[i]
-
-            correct_labels = [s for s in epoch_signals.keys() if '/' + roi in s]
-            correct_short_labels = [s.split('/')[0] for s in correct_labels]
-
-            for idx, label in enumerate(correct_labels):
-                ax.plot(x_axis, means[label], label=correct_short_labels[idx])
-
-            ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
-            ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
-            ax.vlines(300, ymin=min_value, ymax=max_value, colors='g', linestyles='dashed')
-
-            ax.set_title(roi)
-
-        plt.legend(bbox_to_anchor=(1.2, 1.1))
-        plt.savefig(path)
-        plt.close()
-
-        return means
-
-    def get_raw_ndarray(self):
-        """
-        Get the entire raw signal into a numpy array of dimension
-        [number of channels, number of samples]
-        """
-
-        return self.raw.get_data()
-
-    def get_epochs_ndarray(self):
-        """
-        Get the raw signal divided into epochs into a numpy array of dimension
-        [number of epochs, number of channels, number of samples]
-        """
-
-        return self.epochs.get_data()
-
-    def get_epochs_dataframe(self):
-
-        return self.epochs.to_data_frame()
-
-    def __get_eeg_fs__(self):
-        return self.eeg_fs
+    def __getattr__(self, name):
+        return 'EEGAnalysis does not have `{}` attribute.'.format(str(name))

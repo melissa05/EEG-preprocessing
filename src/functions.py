@@ -52,21 +52,23 @@ def derive_conditions_rois(labels):
     return conditions, rois
 
 
-def plot_mean_epochs(mean_signals, conditions, rois):
+def plot_mean_epochs(mean_signals, conditions, rois, erps):
     conditions = sorted(conditions)
     rois = sorted(rois)
 
-    x_axis = list(range(-500, 1002, 2))
+    x_axis = mean_signals['blackwhite/central'].times * 1000
 
     fig, axs = plt.subplots(3, 2, figsize=(25.6, 19.2))
+
     path = '../images/epochs/manipulations.png'
 
     min_value = np.inf
     max_value = -np.inf
 
-    for _, array in mean_signals.items():
-        min_value = min(min_value, min(array))
-        max_value = max(max_value, max(array))
+    for _, evoked in mean_signals.items():
+        data = evoked.get_data()[0]
+        min_value = min(min_value, min(data))
+        max_value = max(max_value, max(data))
 
     for i, ax in enumerate(fig.axes):
 
@@ -75,12 +77,13 @@ def plot_mean_epochs(mean_signals, conditions, rois):
         correct_short_labels = [s.split('/')[1] for s in correct_labels]
 
         for idx, label in enumerate(correct_labels):
-            ax.plot(x_axis, mean_signals[label].T, label=correct_short_labels[idx])
+            ax.plot(x_axis, mean_signals[label].get_data()[0], label=correct_short_labels[idx])
 
-        ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
-        ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
-        ax.vlines(300, ymin=min_value, ymax=max_value, colors='g', linestyles='dashed')
+        for erp in erps:
+            ax.vlines(erp, ymin=min_value, ymax=max_value, linestyles='dashed')
 
+        ax.set_xlabel('Time (\u03bcs)')
+        ax.set_ylabel('Amplitude (V)')
         ax.set_title(condition)
 
     plt.legend(bbox_to_anchor=(1.2, 2))
@@ -98,12 +101,13 @@ def plot_mean_epochs(mean_signals, conditions, rois):
         correct_short_labels = [s.split('/')[0] for s in correct_labels]
 
         for idx, label in enumerate(correct_labels):
-            ax.plot(x_axis, mean_signals[label].T, label=correct_short_labels[idx])
+            ax.plot(x_axis, mean_signals[label].get_data()[0], label=correct_short_labels[idx])
 
-        ax.vlines(0, ymin=min_value, ymax=max_value, linestyles='dashed')
-        ax.vlines(170, ymin=min_value, ymax=max_value, colors='r', linestyles='dashed')
-        ax.vlines(300, ymin=min_value, ymax=max_value, colors='g', linestyles='dashed')
+        for erp in erps:
+            ax.vlines(erp, ymin=min_value, ymax=max_value, linestyles='dashed')
 
+        ax.set_xlabel('Time (\u03bcs)')
+        ax.set_ylabel('Amplitude (V)')
         ax.set_title(roi)
 
     plt.legend(bbox_to_anchor=(1.2, 1.1))
