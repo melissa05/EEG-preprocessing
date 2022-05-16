@@ -80,30 +80,36 @@ class EEGAnalysis:
                 self.eeg_signal = self.eeg_signal * 1e-6
                 self.eeg_instants = dat[i]['time_stamps']
                 self.eeg_fs = int(float(dat[i]['info']['nominal_srate'][0]))
-                self.load_channels(dat[i]['info']['desc'][0]["channels"][0]['channel'])
+                self.load_channels(dat[i]['info']['desc'][0]['channels'][0]['channel'])
                 effective_sample_frequency = float(dat[i]['info']['effective_srate'])
 
             if stream_name == stream_names['Triggers']:
                 self.marker_ids = dat[i]['time_series']
                 self.marker_instants = dat[i]['time_stamps']
 
+        # cast to arrays
         self.eeg_instants = np.array(self.eeg_instants)
         self.eeg_signal = np.asmatrix(self.eeg_signal)
 
+        # check lost-samples problem
         if len(orn_signal) != 0:
             self.fix_lost_samples(orn_signal, orn_instants, effective_sample_frequency)
 
-        length = self.eeg_instants.shape[0]
+        self.length = self.eeg_instants.shape[0]
+
+        # remove samples at the beginning and at the end
         samples_to_be_removed = self.input_info['samples_remove']
+        if samples_to_be_removed > 0:
+            self.eeg_signal = self.eeg_signal[samples_to_be_removed:self.length - samples_to_be_removed]
+            self.eeg_instants = self.eeg_instants[samples_to_be_removed:self.length - samples_to_be_removed]
 
-        self.eeg_signal = self.eeg_signal[samples_to_be_removed:length - samples_to_be_removed]
-        self.eeg_instants = self.eeg_instants[samples_to_be_removed:length - samples_to_be_removed]
-        self.eeg_signal = self.eeg_signal - np.mean(self.eeg_signal, axis=0)
-
+        # reference all the markers instant to the eeg instants (since some samples at the beginning of the
+        # recording have been removed)
         self.marker_instants -= self.eeg_instants[0]
         self.marker_instants = self.marker_instants[self.marker_instants >= 0]
 
-        self.length = self.eeg_instants.shape[0]
+        # remove signal mean
+        self.eeg_signal = self.eeg_signal - np.mean(self.eeg_signal, axis=0)
 
     def load_channels(self, dict_channels):
         """
@@ -113,16 +119,19 @@ class EEGAnalysis:
         # x = data[0][0]['info']['desc'][0]["channels"][0]['channel']
         # to obtain the default-dict list of the channels from the original file (data, not dat!!)
 
+        # cycle over the info of the channels
         for idx, info in enumerate(dict_channels):
 
             if info['label'][0].find('dir') != -1 or info['label'][0] == 'MkIdx':
                 continue
 
+            # get channel name
             self.channels_names[idx] = info['label'][0]
 
             if self.channels_names[idx] == 'FP2':
                 self.channels_names[idx] = 'Fp2'
 
+            # get channel type
             self.channels_types[idx] = 'eog' if info['label'][0].find('EOG') != -1 else 'eeg'
 
     def fix_lost_samples(self, orn_signal, orn_instants, effective_sample_frequency):
@@ -173,7 +182,7 @@ class EEGAnalysis:
         self.raw = mne.io.RawArray(self.eeg_signal.T, self.info, first_samp=self.eeg_instants[0])
 
         # montage setting
-        standard_montage = mne.channels.make_standard_montage('standard_1020')
+        standard_montage = mne.channels.make_standard_montage(self.input_info['montage'])
         self.raw.set_montage(standard_montage)
 
     def visualize_raw(self, signal=True, psd=True, psd_topo=True):
@@ -188,7 +197,6 @@ class EEGAnalysis:
 
         if signal:
             mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=50)
-            # plt.close()
         if psd:
             self.raw.plot_psd()
             plt.close()
@@ -208,10 +216,12 @@ class EEGAnalysis:
         Filter of MNE raw instance data with a band-pass filter and a notch filter
         """
 
+        # extract the frequencies for the filtering
         l_freq = self.input_info['filtering']['low']
         h_freq = self.input_info['filtering']['high']
         n_freq = self.input_info['filtering']['notch']
 
+        # apply band-pass filter
         if not (l_freq is None and h_freq is None):
             iir_params = dict(order=8, ftype='butter')
             iir_params = mne.filter.construct_iir_filter(iir_params=iir_params, f_pass=[l_freq, h_freq],
@@ -221,6 +231,7 @@ class EEGAnalysis:
                             l_trans_bandwidth=0.1, h_trans_bandwidth=0.1,
                             method='iir', iir_params=iir_params, verbose=40)
 
+        # apply notch filter
         if n_freq is not None:
             self.raw.notch_filter(freqs=n_freq, verbose=40)
 
@@ -259,31 +270,27 @@ class EEGAnalysis:
         # reconst_raw.plot_psd()
         self.raw = reconst_raw
 
-    def define_annotations(self, only_manipulation=True):
-        """
-        :param only_manipulation: boolean variable to select to manipulate epochs only according to the image
-        manipulation type or according to the whole trigger (img_name/manipulation)
-        :return:
-        """
+    def define_annotations(self):
+
         # generation of the events according to the definition
         triggers = {'onsets': [], 'duration': [], 'description': []}
 
+        # read every trigger in the stream
         for idx, marker_data in enumerate(self.marker_ids):
 
+            # annotations to be rejected
             if marker_data[0] in self.input_info['bad_epoch_names']:
                 continue
 
+            # extract triggers information
             triggers['onsets'].append(self.marker_instants[idx])
             triggers['duration'].append(int(0))
 
-            if only_manipulation:
-                manipulation = marker_data[0].split('/')[-1]
-                if manipulation == 'edges':
-                    manipulation = 'canny'
-                triggers['description'].append(manipulation)
-            else:
-                triggers['description'].append(marker_data[0])
+            condition = marker_data[0].split('/')[-1]
+            if condition == 'edges': condition = 'canny'
+            triggers['description'].append(condition)
 
+        # define MNE annotations
         self.annotations = mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description'])
 
     def define_epochs_raw(self, visualize=True, rois=True):
@@ -294,18 +301,16 @@ class EEGAnalysis:
         :param rois: boolean variable to select if visualize results in terms to rois or not
         """
 
+        # set the annotations on the current raw and extract the correspondent events
         self.raw.set_annotations(self.annotations)
         self.events, self.event_mapping = mne.events_from_annotations(self.raw)
 
+        # Automatic rejection criteria for the epochs
+        reject_criteria = self.input_info['epochs_reject_criteria']
+
         # generation of the epochs according to the events
-
-        # Automatic rejection criteria: reject epochs based on maximum peak-to-peak signal amplitude (PTP)
-        reject_criteria = dict(eeg=200e-6,  # 200 µV
-                               eog=1e-3)  # 1 mV
-
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping, preload=True,
-                                 baseline=(self.t_min, 0),
-                                 reject=reject_criteria, tmin=self.t_min, tmax=self.t_max)
+                                 baseline=(self.t_min, 0), reject=reject_criteria, tmin=self.t_min, tmax=self.t_max)
 
         if visualize:
             self.visualize_epochs(signal=False, topo_plot=False, conditional_epoch=True, rois=rois)
@@ -328,18 +333,24 @@ class EEGAnalysis:
 
         if conditional_epoch:
             if rois:
-                for condition in self.event_mapping.keys():
-                    images = self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers,
-                                                               # vmin=-6e-9, vmax=6e-9,
-                                                               # scalings=viz_scaling,
-                                                               show=False)
 
+                for condition in self.event_mapping.keys():
+
+                    # generate the epochs plots according to the roi and save them
+                    images = self.epochs[condition].plot_image(combine='mean', group_by=rois_numbers, show=False)
                     for idx, img in enumerate(images):
                         img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + rois_names[idx] + '.png')
                         plt.close(img)
+
             else:
+
                 for condition in self.event_mapping.keys():
-                    self.epochs[condition].plot_image(show=False)
+
+                    # generate the epochs plots for each channel and save them
+                    images = self.epochs[condition].plot_image(show=False)
+                    for idx, img in enumerate(images):
+                        img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + self.channels_names[idx] + '.png')
+                        plt.close(img)
 
         plt.close('all')
 
@@ -352,8 +363,10 @@ class EEGAnalysis:
 
     def define_rois(self):
 
+        # rois dict given in input
         rois = self.input_info['rois']
 
+        # channel numbers associated to each roi
         rois_numbers = dict(
             central=np.array([self.raw.ch_names.index(i) for i in rois['central']]),
             frontal=np.array([self.raw.ch_names.index(i) for i in rois['frontal']]),
@@ -365,56 +378,72 @@ class EEGAnalysis:
 
     def define_ers_erd(self):
 
-        def square_epochs(array_data):
+        # function to get the square of the signal (approximation of the power)
+        def square_signal(array_data):
             return np.square(array_data)
 
         if len(self.input_info['erds']) != 2:
             print('No erds frequencies provided!')
             return
 
+        # frequencies for the erds maps
         f_min = int(self.input_info['erds'][0])
         f_max = int(self.input_info['erds'][1])
-
-        rois_numbers = self.define_rois()
-
-        x_axis = list(range(int(self.t_min * 1000 - 2), int(self.t_max * 1000 + 1), 2))
 
         f_start = list(range(f_min, f_max, 1))
         f_end = list(range(f_min+2, f_max+2, 1))
         f_plot = list(range(f_min+1, f_max+2, 1))
 
+        rois_numbers = self.define_rois()
+
+        x_axis = None
+        # x_axis = list(range(int(self.t_min * 1000 - 2), int(self.t_max * 1000 + 1), 2))
+
         signals = self.raw.copy()
         filter_bank = []
 
+        # for each frequency band in the erds
         for idx, start in enumerate(f_start):
 
+            # filter the signal
             filtered_signals = signals.filter(start, f_end[idx], l_trans_bandwidth=1, h_trans_bandwidth=1)
 
+            # divide into epochs
             filtered_signals.set_annotations(self.annotations)
             events, event_mapping = mne.events_from_annotations(self.raw)
-
-            reject_criteria = dict(eeg=200e-6, eog=1e-3)
             epochs = mne.Epochs(filtered_signals, events, self.event_mapping, preload=True, baseline=(self.t_min, 0),
-                                reject=reject_criteria, tmin=self.t_min, tmax=self.t_max)
+                                reject=self.input_info['epochs_reject_criteria'], tmin=self.t_min, tmax=self.t_max)
 
+            # save the obtained epochs
             filter_bank.append(epochs)
 
+        # generation of the erds images, one for each condition and for each roi
+
+        # for each type of epoch
         for condition in self.event_mapping.keys():
 
-            print(condition)
-
+            # for each roi
             for roi, roi_numbers in rois_numbers.items():
 
                 freq_erds_results = []
 
+                # for each frequency band (so for each set of epochs previously saved)
                 for freq_band_epochs in filter_bank:
 
                     # take frequency band of interest
                     condition_epochs = freq_band_epochs[condition].copy()
+
+                    if x_axis is None:
+                        x_axis = condition_epochs.times
+                        step = np.abs(x_axis[1]-x_axis[0])
+                        x_axis = np.append(x_axis, x_axis[-1]+step)
+                        print(x_axis)
+
                     # take channels of interest
                     condition_epochs = condition_epochs.pick(roi_numbers)
+
                     # square each epoch
-                    condition_epochs = condition_epochs.apply_function(square_epochs)
+                    condition_epochs = condition_epochs.apply_function(square_signal)
 
                     # extract data
                     epochs_data = condition_epochs.get_data()
@@ -433,13 +462,12 @@ class EEGAnalysis:
                                 erds[sample] = (power - current_reference_power)/current_reference_power * 100
                             erds_epochs.append(erds)
 
-                    # mean for each epoch and channel
+                    # mean for each epoch and channel and save
                     mean_erds = np.mean(np.array(erds_epochs), axis=0)
                     freq_erds_results.append(mean_erds)
 
-                freq_erds_results = np.array(freq_erds_results)
-
                 # visualization
+                freq_erds_results = np.array(freq_erds_results)
                 z_min, z_max = -np.abs(freq_erds_results).max(), np.abs(freq_erds_results).max()
                 fig, ax = plt.subplots()
                 p = ax.pcolor(x_axis, f_plot, freq_erds_results, cmap='RdBu', snap=True, vmin=z_min, vmax=z_max)
