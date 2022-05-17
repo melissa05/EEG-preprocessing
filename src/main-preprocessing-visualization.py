@@ -5,7 +5,7 @@ from functions import *
 
 if __name__ == '__main__':
 
-    paths = ['../data/eeg/subj_jomo20_block1.xdf', '../data/eeg/subj_mama13_block1.xdf',
+    paths = ['../data/eeg/subj_mama13_block1.xdf', '../data/eeg/subj_jomo20_block1.xdf',
              '../data/eeg/subj_moob25_block1.xdf', '../data/eeg/subj_vamo24_block1.xdf']
 
     # ['../data/eeg/subj_maba09_block1.xdf', '../data/eeg/subj_soze31_block1.xdf',
@@ -53,6 +53,8 @@ if __name__ == '__main__':
                     signals_means[key] = mne.combine_evoked([signals_means[key], evoked[key]], weights='equal')
                 else:
                     signals_means[key] = evoked[key]
+
+        exit(1)
 
     conditions, rois = derive_conditions_rois(labels=signals_means.keys())
     plot_mean_epochs(signals_means, conditions, rois, dict_info['erp'])
