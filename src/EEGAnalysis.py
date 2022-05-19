@@ -1,9 +1,11 @@
 import os
+import pickle
 from pathlib import Path
 
 import mne
 import numpy as np
 import pyxdf
+import scipy.signal
 from matplotlib import pyplot as plt
 
 
@@ -225,13 +227,16 @@ class EEGAnalysis:
 
         # apply band-pass filter
         if not (l_freq is None and h_freq is None):
-            iir_params = dict(order=8, ftype='butter')
-            iir_params = mne.filter.construct_iir_filter(iir_params=iir_params, f_pass=[l_freq, h_freq],
-                                                         sfreq=self.eeg_fs, btype='bandpass', return_copy=False, verbose=40)
+            # iir_params = dict(order=8, ftype='butter')
+            # iir_params = mne.filter.construct_iir_filter(iir_params=iir_params, f_pass=[l_freq, h_freq],
+            #                                              sfreq=self.eeg_fs, btype='bandpass', return_copy=False, verbose=40)
+            #
+            # self.raw.filter(l_freq=l_freq, h_freq=h_freq, filter_length=self.length,
+            #                 l_trans_bandwidth=0.1, h_trans_bandwidth=0.1,
+            #                 method='iir', iir_params=iir_params, verbose=40)
 
-            self.raw.filter(l_freq=l_freq, h_freq=h_freq, filter_length=self.length,
-                            l_trans_bandwidth=0.1, h_trans_bandwidth=0.1,
-                            method='iir', iir_params=iir_params, verbose=40)
+            self.raw.filter(l_freq=l_freq, h_freq=h_freq,
+                            l_trans_bandwidth=0.1, h_trans_bandwidth=0.1, verbose=40)
 
         # apply notch filter
         if n_freq is not None:
@@ -251,11 +256,10 @@ class EEGAnalysis:
         ica.plot_components()
         # ica.plot_properties(eeg_raw)
 
-        # find which ICs match the EOG pattern
-        eog_indices, eog_scores = ica.find_bads_eog(self.raw, h_freq=5, threshold=3)
-        print(eog_indices)
-
-        ica.exclude = ica.exclude + eog_indices
+        # # find which ICs match the EOG pattern
+        # eog_indices, eog_scores = ica.find_bads_eog(self.raw, h_freq=5, threshold=3)
+        # print(eog_indices)
+        # ica.exclude = ica.exclude + eog_indices
 
         # # barplot of ICA component "EOG match" scores
         # ica.plot_scores(eog_scores)
@@ -298,12 +302,12 @@ class EEGAnalysis:
         # define MNE annotations
         self.annotations = mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description'])
 
-    def define_epochs_raw(self, visualize=True, rois=True, set_annotations=True):
+    def define_epochs_raw(self, save_epochs=True, rois=True, set_annotations=True):
         """
         Function to extract events from the marker data, generate the correspondent epochs and determine annotation in
         the raw data according to the events
         :param set_annotations:
-        :param visualize:
+        :param save_epochs:
         :param rois: boolean variable to select if visualize results in terms to rois or not
         """
 
@@ -319,7 +323,7 @@ class EEGAnalysis:
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping, preload=True,
                                  baseline=(self.t_min, 0), reject=reject_criteria, tmin=self.t_min, tmax=self.t_max)
 
-        if visualize:
+        if save_epochs:
             self.visualize_epochs(signal=False, topo_plot=False, conditional_epoch=True, rois=rois)
 
     def visualize_epochs(self, signal=True, topo_plot=True, conditional_epoch=True, rois=True):
@@ -356,7 +360,8 @@ class EEGAnalysis:
                     # generate the epochs plots for each channel and save them
                     images = self.epochs[condition].plot_image(show=False)
                     for idx, img in enumerate(images):
-                        img.savefig(self.file_info['output_folder'] + '/' + condition + '_' + self.channels_names[idx] + '.png')
+                        img.savefig(
+                            self.file_info['output_folder'] + '/' + condition + '_' + self.channels_names[idx] + '.png')
                         plt.close(img)
 
         plt.close('all')
@@ -399,9 +404,6 @@ class EEGAnalysis:
         f_start = list(range(f_min, f_max, 1))
         f_end = list(range(f_min + 2, f_max + 2, 1))
         f_plot = list(range(f_min + 1, f_max + 2, 1))
-
-        signals = self.raw.copy()
-        filter_bank = []
 
         signals = self.raw.copy()
         filter_bank = []
@@ -485,17 +487,33 @@ class EEGAnalysis:
                 fig.savefig(self.file_info['output_folder'] + '/' + condition + '_' + roi + '_erds.png')
                 plt.close()
 
-    def define_evoked(self):
+    def define_ers_erd_p_welch(self):
 
         rois_numbers = self.define_rois()
+        x_axis = None
 
-        evoked = self.epochs.average(picks=['eeg'], by_event_type=True)
+        f_min = int(self.input_info['erds'][0])
+        f_max = int(self.input_info['erds'][1])
 
-        for evok in evoked:
-            roi_evoked = mne.channels.combine_channels(evok, rois_numbers, method='mean')
-            self.evoked_rois[evok.comment] = roi_evoked
+        f_start = list(range(f_min, f_max, 1))
+        f_end = list(range(f_min + 2, f_max + 2, 1))
+        f_plot = list(range(f_min + 1, f_max + 2, 1))
 
-    def plot_evoked(self):
+        signals = self.epochs.get_data(picks='eeg')
+        print(signals.shape)
+        periodogram = []
+
+        for epoch in signals:
+            for channel in epoch:
+                windows = np.lib.stride_tricks.sliding_window_view(channel, int(self.eeg_fs/2))
+                for window in windows:
+                    f, psd = scipy.signal.periodogram(window, fs=self.eeg_fs)
+                    periodogram.append(psd)
+
+        periodogram = np.array(periodogram)
+        print(periodogram.shape)
+
+    def define_evoked(self):
 
         rois_numbers = self.define_rois()
 
@@ -508,10 +526,27 @@ class EEGAnalysis:
 
                 condition_roi_epoch = condition_roi_epoch.average()
                 condition_roi_epoch = mne.channels.combine_channels(condition_roi_epoch,
-                                                                    groups={'mean': list(range(len(rois_numbers[roi])))})
+                                                                    groups={
+                                                                        'mean': list(range(len(rois_numbers[roi])))})
 
                 label = condition + '/' + roi
                 self.evoked[label] = condition_roi_epoch
+
+    def get_peak(self):
+
+        peaks = {}
+
+        for condition, evoked in self.evoked.items():
+
+            _, latency, amplitude = evoked.get_peak(tmin=0.120, tmax=0.220, mode='neg', return_amplitude=True)
+            peaks[condition] = [latency, amplitude]
+
+        with open('../data/eeg/peaks.pickle', 'wb') as handle:
+            pickle.dump(peaks, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def plot_evoked(self):
+
+        rois_numbers = self.define_rois()
 
         # get minimum and maximum value of the mean signals
         min_value, max_value = np.inf, -np.inf
@@ -535,7 +570,8 @@ class EEGAnalysis:
             correct_short_labels = [s.split('/')[1] for s in correct_labels]
 
             for idx, label in enumerate(correct_labels):
-                ax.plot(self.evoked[label].times*1000, self.evoked[label].get_data()[0], label=correct_short_labels[idx])
+                ax.plot(self.evoked[label].times * 1000, self.evoked[label].get_data()[0],
+                        label=correct_short_labels[idx])
 
             for erp in self.input_info['erp']:
                 ax.vlines(erp, ymin=min_value, ymax=max_value, linestyles='dashed')
@@ -556,7 +592,8 @@ class EEGAnalysis:
             correct_short_labels = [s.split('/')[0] for s in correct_labels]
 
             for idx, label in enumerate(correct_labels):
-                ax.plot(self.evoked[label].times*1000, self.evoked[label].get_data()[0], label=correct_short_labels[idx])
+                ax.plot(self.evoked[label].times * 1000, self.evoked[label].get_data()[0],
+                        label=correct_short_labels[idx])
 
             for erp in self.input_info['erp']:
                 ax.vlines(erp, ymin=min_value, ymax=max_value, linestyles='dashed')
@@ -587,34 +624,46 @@ class EEGAnalysis:
         # self.ica_remove_eog()
 
         self.define_annotations()
-        self.define_epochs_raw(visualize=save_images)
-        self.define_ers_erd()
-        self.plot_evoked()
+        self.define_epochs_raw(save_epochs=save_images)
+        if save_images:
+            self.define_ers_erd()
+        self.define_evoked()
+        self.get_peak()
+        if save_images:
+            self.plot_evoked()
 
-    def run_raw(self, visualize_raw=False):
+    def run_raw(self, visualize_raw=False, filtering=False):
 
         self.create_raw()
 
         if visualize_raw:
             self.visualize_raw()
 
-        if self.input_info['spatial_filtering'] is not None:
-            self.set_reference()
+        if filtering:
 
-        if self.input_info['filtering'] is not None:
-            self.filter_raw()
+            if self.input_info['spatial_filtering'] is not None:
+                self.set_reference()
 
-        if visualize_raw:
-            self.visualize_raw()
+            if self.input_info['filtering'] is not None:
+                self.filter_raw()
+
+            if visualize_raw:
+                self.visualize_raw()
 
         # self.ica_remove_eog()
 
         self.define_annotations()
         self.raw.set_annotations(self.annotations)
 
-    def run_combine_raw(self, visualize_raw=False, save_images=True, new_raws=[]):
+    def run_combine_raw(self, visualize_raw=False, save_images=True, new_raws=None):
+
+        if not isinstance(new_raws, list):
+            new_raws = []
 
         self.create_raw()
+
+        if visualize_raw:
+            self.visualize_raw()
 
         if self.input_info['spatial_filtering'] is not None:
             self.set_reference()
@@ -628,16 +677,12 @@ class EEGAnalysis:
         new_raws.insert(0, self.raw)
         self.raw = mne.concatenate_raws(new_raws)
 
-        events, events_id = mne.events_from_annotations(self.raw)
-        print(events[:, 2])
-        exit(1)
-
         if visualize_raw:
             self.visualize_raw()
 
-        # self.ica_remove_eog()
+        self.ica_remove_eog()
 
-        self.define_epochs_raw(visualize=save_images, set_annotations=False)
+        self.define_epochs_raw(save_epochs=save_images, set_annotations=False)
         self.define_ers_erd()
         self.plot_evoked()
 

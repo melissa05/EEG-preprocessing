@@ -41,7 +41,7 @@ if __name__ == '__main__':
         eeg.create_raw()
         eeg.filter_raw()
         eeg.set_reference()
-        eeg.define_epochs_raw(visualize=False, only_manipulation=False)
+        eeg.define_epochs_raw(save_epochs=False)
 
         signals = eeg.get_epochs_dataframe()
         signals.to_csv('../data/eeg/signal.csv')

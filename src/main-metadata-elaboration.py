@@ -112,7 +112,7 @@ if __name__ == '__main__':
 
         # extraction of the columns of interest and subsequent saving
         data = df[columns]
-        data = data.round({'valence_slider.response': 0, 'arousal_slider.response': 0})
+        # data = data.round({'valence_slider.response': 0, 'arousal_slider.response': 0})
         data.insert(0, participant_code, code)
 
         means = data.loc[:, ['vm', 'am']]

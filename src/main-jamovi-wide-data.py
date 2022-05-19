@@ -7,15 +7,28 @@ if __name__ == '__main__':
 
     rating_path = '../data/ratings-results/ratings-results.csv'
     data = pd.read_csv(rating_path, index_col=0)
-    data = data[['code', 'manipulation', 'valence', 'arousal']]
 
     data['code'] = data['code'].astype('category')
+    data['img_name'] = data['img_name'].astype('category')
     data['manipulation'] = data['manipulation'].astype('category')
+
+    # h1: original vs new ratings
+
+    image_codes = data.loc[:, 'img_name'].to_list()
+    image_codes = list(set(image_codes))
+    image_codes = [code for code in image_codes if '_orig' in code]
+
+    features = [['vm', 'valence'], ['am', 'arousal']]
+
+    for feature in features:
+        x = data.loc[data['img_name'].isin(image_codes)]
+        data_wide = x.groupby(['img_name']).mean()[feature].dropna().reset_index()
+        data_wide.to_csv('../data/jamovi-tables/h1_' + feature[1] + '.csv', index=0)
+
+    # h2: subject ID and rating according to the manipulation
 
     participant_codes = data.loc[:, 'code'].to_list()
     participant_codes = list(set(participant_codes))
-
-    # h1: subject ID and rating
 
     features = ['valence', 'arousal']
 
@@ -34,4 +47,4 @@ if __name__ == '__main__':
 
         data_wide.insert(0, 'gender', gender)
         data_wide['gender'] = data_wide['gender'].astype('category')
-        data_wide.to_csv('../data/jamovi-tables/h1_'+feature+'.csv')
+        data_wide.to_csv('../data/jamovi-tables/h2_'+feature+'.csv')

@@ -26,7 +26,7 @@ if __name__ == '__main__':
         print('\n\nAnalyzing file', path)
 
         eeg = EEGAnalysis(path, dict_info)
-        eeg.run_whole(visualize_raw=False, save_images=True)
+        eeg.run_whole(visualize_raw=False, save_images=False)
 
         if len(paths) > 1:
             evoked = eeg.evoked
@@ -35,6 +35,8 @@ if __name__ == '__main__':
                     signals_means[key] = mne.combine_evoked([signals_means[key], evoked[key]], weights='equal')
                 else:
                     signals_means[key] = evoked[key]
+
+        exit(1)
 
     conditions, rois = derive_conditions_rois(labels=signals_means.keys())
     plot_mean_epochs(signals_means, conditions, rois, dict_info['erp'])
