@@ -7,6 +7,7 @@ import numpy as np
 import pyxdf
 import scipy.signal
 from matplotlib import pyplot as plt
+from more_itertools import locate
 
 
 class EEGAnalysis:
@@ -487,10 +488,9 @@ class EEGAnalysis:
                 fig.savefig(self.file_info['output_folder'] + '/' + condition + '_' + roi + '_erds.png')
                 plt.close()
 
-    def define_ers_erd_p_welch(self):
+    def define_ers_erd_spectogram(self):
 
         rois_numbers = self.define_rois()
-        x_axis = None
 
         f_min = int(self.input_info['erds'][0])
         f_max = int(self.input_info['erds'][1])
@@ -500,18 +500,64 @@ class EEGAnalysis:
         f_plot = list(range(f_min + 1, f_max + 2, 1))
 
         signals = self.epochs.get_data(picks='eeg')
-        print(signals.shape)
-        periodogram = []
+        # print('Signal shape', signals.shape)
 
-        for epoch in signals:
-            for channel in epoch:
-                windows = np.lib.stride_tricks.sliding_window_view(channel, int(self.eeg_fs/2))
-                for window in windows:
-                    f, psd = scipy.signal.periodogram(window, fs=self.eeg_fs)
-                    periodogram.append(psd)
+        annotations = [annotation[0][2] for annotation in self.epochs.get_annotations_per_epoch()]
+        conditions = list(set(annotations))
+        # print(annotations)
+        # print(conditions)
 
-        periodogram = np.array(periodogram)
-        print(periodogram.shape)
+        freq, time, spectrogram = scipy.signal.spectrogram(signals, fs=self.eeg_fs, nperseg=250, noverlap=225)
+        time = time + self.t_min
+        spectrogram = np.square(spectrogram)
+        # print('Spectrogram shape', spectrogram.shape)
+        # print('')
+        last_time = time[-1] + (time[-1] - time[-2])
+        x_axis = np.insert(time, -1, last_time)
+        y_axis = freq
+        # last_freq = freq[-1] + (freq[-1] - freq[-2])
+        # y_axis = np.insert(freq, -1, last_freq)
+
+        for roi in rois_numbers.keys():
+            numbers = rois_numbers[roi]
+            roi_epochs = spectrogram[:, numbers, :, :]
+            # print('Roi spectrogram shape', np.array(roi_epochs).shape)
+            reference = np.squeeze(roi_epochs[:, :, :, np.argwhere(time < 0)])
+            # print('Roi reference shape', reference.shape)
+            power_reference = np.mean(reference, axis=-1)
+            # print('Roi reference power shape', power_reference.shape)
+
+            # todo da fare in modo più efficient
+            for idx_epoch, epoch in enumerate(roi_epochs):
+                for idx_channel, channel in enumerate(epoch):
+                    for idx_freq, freq in enumerate(channel):
+                        reference = power_reference[idx_epoch, idx_channel, idx_freq]
+                        for idx_sample, sample in enumerate(freq):
+                            roi_epochs[idx_epoch, idx_channel, idx_freq, idx_sample] = (sample - reference) / reference
+            # print('Roi ERDS shape', roi_epochs.shape)
+
+            for condition in conditions:
+                # print(condition)
+                roi_condition_epochs = roi_epochs[list(locate(annotations, lambda x: x == condition))]
+                # print('Condition roi shape', roi_condition_epochs.shape)
+                roi_condition_epochs = np.mean(roi_condition_epochs, axis=0)
+                # print('Mean ERDS shape', roi_condition_epochs.shape)
+                roi_condition_epochs = np.mean(roi_condition_epochs, axis=0)
+                # print('Mean ERDS shape', roi_condition_epochs.shape)
+
+                roi_condition_epochs = np.array(roi_condition_epochs)
+                z_min, z_max = -np.abs(roi_condition_epochs).max(), np.abs(roi_condition_epochs).max()
+                fig, ax = plt.subplots()
+                p = ax.pcolor(roi_condition_epochs, cmap='RdBu', snap=True, vmin=z_min, vmax=z_max)
+                ax.set_xlabel('Time (\u03bcs)')
+                ax.set_ylabel('Frequency (Hz)')
+                ax.set_title(condition + ' ' + roi)
+                ax.axvline(0, color='k')
+                fig.colorbar(p, ax=ax)
+                fig.savefig(self.file_info['output_folder'] + '/' + condition + '_' + roi + '_erds.png')
+                plt.close()
+
+            print('')
 
     def define_evoked(self):
 
@@ -537,7 +583,6 @@ class EEGAnalysis:
         peaks = {}
 
         for condition, evoked in self.evoked.items():
-
             _, latency, amplitude = evoked.get_peak(tmin=0.120, tmax=0.220, mode='neg', return_amplitude=True)
             peaks[condition] = [latency, amplitude]
 
@@ -624,9 +669,10 @@ class EEGAnalysis:
         # self.ica_remove_eog()
 
         self.define_annotations()
-        self.define_epochs_raw(save_epochs=save_images)
+        self.define_epochs_raw(save_epochs=False)  # save_images)  # TODO remove
         if save_images:
-            self.define_ers_erd()
+            self.define_ers_erd_spectogram()
+            exit(1)
         self.define_evoked()
         self.get_peak()
         if save_images:
