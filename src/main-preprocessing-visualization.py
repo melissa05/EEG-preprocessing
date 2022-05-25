@@ -8,7 +8,7 @@ if __name__ == '__main__':
 
     paths = ['../data/eeg/subj_mile27_block1.xdf', '../data/eeg/subj_mama13_block1.xdf',
              '../data/eeg/subj_moob25_block1.xdf', '../data/eeg/subj_vamo24_block1.xdf',
-             '../data/eeg/subj_jomo20_block1.xdf']
+             '../data/eeg/subj_jomo20_block1.xdf', '../data/eeg/subj_vasa28_block1.xdf']
 
     # ['../data/eeg/subj_maba09_block1.xdf', '../data/eeg/subj_soze31_block1.xdf',
     # '../data/eeg/subj_nipe10_block1.xdf', '../data/eeg/subj_dino02_block1.xdf']
