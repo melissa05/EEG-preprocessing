@@ -36,7 +36,5 @@ if __name__ == '__main__':
                 else:
                     signals_means[key] = evoked[key]
 
-        exit(1)
-
     conditions, rois = derive_conditions_rois(labels=signals_means.keys())
     plot_mean_epochs(signals_means, conditions, rois, dict_info['erp'])
