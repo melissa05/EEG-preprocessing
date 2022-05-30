@@ -26,7 +26,7 @@ if __name__ == '__main__':
         print('\n\nAnalyzing file', path)
 
         eeg = EEGAnalysis(path, dict_info)
-        eeg.run_whole(visualize_raw=False, save_images=True)
+        eeg.run_whole(visualize_raw=False, save_images=False)
 
         if len(paths) > 1:
             evoked = eeg.evoked

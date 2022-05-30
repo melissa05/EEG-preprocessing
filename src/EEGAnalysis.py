@@ -500,9 +500,8 @@ class EEGAnalysis:
 
         time = time + self.t_min
         spectrogram = np.squeeze(spectrogram[:, :, np.argwhere(freq < f_max), :])
-        # spectrogram = np.square(spectrogram)
         freq = np.squeeze(freq[np.argwhere(freq < f_max)])
-        # print('')
+
         last_time = time[-1] + (time[-1] - time[-2])
         x_axis = np.insert(time, -1, last_time)
         last_freq = freq[-1] + (freq[-1] - freq[-2])
@@ -511,26 +510,9 @@ class EEGAnalysis:
         for roi in rois_numbers.keys():
             numbers = rois_numbers[roi]
             roi_epochs = spectrogram[:, numbers, :, :]
-            # print('Roi spectrogram shape', np.array(roi_epochs).shape)
 
-            # plt.plot(signals[100, 6])
-            # plt.savefig(self.file_info['output_folder'] + '/' + roi + '_signal.png')
-            # fig, ax = plt.subplots()
-            # p = ax.pcolor(x_axis, y_axis, spectrogram[100, 6], cmap='RdBu', snap=True)  # , vmin=z_min, vmax=z_max)
-            # ax.set_xlabel('Time (\u03bcs)')
-            # ax.set_ylabel('Frequency (Hz)')
-            # # ax.set_title(condition + ' ' + roi)
-            # ax.axvline(0, color='k')
-            # fig.colorbar(p, ax=ax)
-            # fig.savefig(self.file_info['output_folder'] + '/' + roi + '_spect.png')
-            # plt.close()
-
-            # print(time)
-            # print(np.argwhere(time<0))
             reference = np.squeeze(roi_epochs[:, :, :, np.argwhere(time < 0)])
-            # print('Roi reference shape', reference.shape)
             power_reference = np.mean(reference, axis=-1)
-            # print('Roi reference power shape', power_reference.shape)
 
             # todo da fare in modo più efficente
             for idx_epoch, epoch in enumerate(roi_epochs):
@@ -539,16 +521,12 @@ class EEGAnalysis:
                         reference = power_reference[idx_epoch, idx_channel, idx_freq]
                         for idx_sample, sample in enumerate(freq_value):
                             roi_epochs[idx_epoch, idx_channel, idx_freq, idx_sample] = (sample - reference) / reference
-            # print('Roi ERDS shape', roi_epochs.shape)
 
             for condition in conditions:
                 # print(condition)
                 roi_condition_epochs = roi_epochs[list(locate(annotations, lambda x: x == condition))]
-                # print('Condition roi shape', roi_condition_epochs.shape)
                 roi_condition_epochs = np.mean(roi_condition_epochs, axis=0)
-                # print('Mean ERDS shape', roi_condition_epochs.shape)
                 roi_condition_epochs = np.mean(roi_condition_epochs, axis=0)
-                # print('Mean ERDS shape', roi_condition_epochs.shape)
 
                 roi_condition_epochs = np.array(roi_condition_epochs)
                 z_min, z_max = -np.abs(roi_condition_epochs).max(), np.abs(roi_condition_epochs).max()
@@ -561,8 +539,6 @@ class EEGAnalysis:
                 fig.colorbar(p, ax=ax)
                 fig.savefig(self.file_info['output_folder'] + '/' + condition + '_' + roi + '_erds.png')
                 plt.close()
-
-            # print('')
 
     def define_evoked(self):
 
@@ -583,16 +559,45 @@ class EEGAnalysis:
                 label = condition + '/' + roi
                 self.evoked[label] = condition_roi_epoch
 
-    def get_peak(self):
+    def get_n170_peak(self, mean=True):
 
         peaks = {}
 
-        for condition, evoked in self.evoked.items():
-            _, latency, amplitude = evoked.get_peak(tmin=0.120, tmax=0.220, mode='neg', return_amplitude=True)
-            peaks[condition] = [latency, amplitude]
+        epochs_interest = self.epochs.copy()
+        epochs_interest = epochs_interest.pick_channels(['FT9', 'Fc5', 'T7', 'TP9', 'CP5'])
 
-        with open('../data/eeg/peaks.pickle', 'wb') as handle:
-            pickle.dump(peaks, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        t_min = 0.160
+        t_max = 0.200
+
+        for condition in self.event_mapping.keys():
+
+            condition_roi_epoch = epochs_interest[condition]
+            data = condition_roi_epoch.crop(tmin=t_min, tmax=t_max).get_data()
+            peak_condition = []
+
+            for epoch in data:
+                signal = np.array(epoch).mean(axis=0)
+                peak_loc, peak_mag = mne.preprocessing.peak_finder(signal, thresh=(max(signal)-min(signal))/20, extrema=-1, verbose=False)
+                peak_mag = peak_mag * 1e6
+
+                if len(peak_loc) > 1 and peak_loc[0] == 0:
+                    peak_loc = peak_loc[1:]
+                    peak_mag = peak_mag[1:]
+                if len(peak_loc) > 1 and peak_loc[-1] == (len(signal)-1):
+                    peak_loc = peak_loc[:-1]
+                    peak_mag = peak_mag[:-1]
+
+                # peak_loc = peak_loc[np.argmin(peak_mag)]
+                peak_mag = np.min(peak_mag)
+
+                peak_condition.append(peak_mag)
+
+            if mean:
+                peaks[condition] = np.mean(np.array(peak_condition))
+            else:
+                peaks[condition] = np.array(peak_condition)
+
+        return peaks
 
     def plot_evoked(self):
 
@@ -678,7 +683,7 @@ class EEGAnalysis:
         if save_images:
             self.define_ers_erd_spectrogram()
         self.define_evoked()
-        self.get_peak()
+        self.get_n170_peak()
         if save_images:
             self.plot_evoked()
 
