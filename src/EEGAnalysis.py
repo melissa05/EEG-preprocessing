@@ -588,7 +588,7 @@ class EEGAnalysis:
 
             condition_labels = []
             if not mean:
-                condition_labels = [label for label in labels if condition in label]
+                condition_labels = [label for label in labels if '/'+condition in label]
 
             peak_condition = []
             latency_condition = []
@@ -623,7 +623,9 @@ class EEGAnalysis:
                 peaks[condition] = np.array(peak_condition)
                 annotations[condition] = annotation_condition
 
-        print(annotations)
+        if not mean:
+            return peaks, annotations
+
         return peaks
 
     def plot_evoked(self):
