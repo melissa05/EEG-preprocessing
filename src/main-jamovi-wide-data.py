@@ -29,7 +29,7 @@ if __name__ == '__main__':
     for feature in features:
         x = data.loc[data['img_name'].isin(image_codes)]
         data_wide = x.groupby(['img_name']).mean()[feature].dropna().reset_index()
-        data_wide.to_csv('../data/jamovi-tables/h1_' + feature[1] + '.csv', index=0)
+        data_wide.to_csv('../data/jamovi-tables/h1_' + feature[1] + '.csv', index=False)
 
     # h2: subject ID and rating according to the manipulation
 
@@ -50,35 +50,69 @@ if __name__ == '__main__':
 
         data_wide.insert(0, 'gender', gender)
         data_wide['gender'] = data_wide['gender'].astype('category')
-        data_wide.to_csv('../data/jamovi-tables/h2_' + feature + '.csv')
+        data_wide.to_csv('../data/jamovi-tables/h2_' + feature + '.csv', index=False)
 
-    # h3: subject ID and N170 amplitude according to the manipulation
+    # # h3: subject ID and N170 amplitude according to the manipulation
+    #
+    # path = '../data/eeg/'
+    # dict_info = json.load(open("../data/eeg/info.json"))
+    #
+    # n200_wide = pd.DataFrame(columns=['code', 'gender', 'blackwhite', 'blurring', 'circularblurringext',
+    #                                   'circularblurringint', 'canny', 'original'])
+    # p300_wide = n200_wide.copy()
+    # columns = list(n200_wide.columns)[2:]
+    #
+    # for code in participant_codes:
+    #
+    #     file_path = path + 'subj_' + code + '_block1.xdf'
+    #     g = participant_data.loc[participant_data['code'] == code]['gender'].values[0][0]
+    #
+    #     eeg = EEGAnalysis(file_path, dict_info=dict_info)
+    #     eeg.run_raw(filtering=True)
+    #     eeg.define_epochs_raw(save_epochs=False)
+    #
+    #     n200_peaks = eeg.get_peak()
+    #     peaks_values = [n200_peaks[key] for key in columns]
+    #
+    #     peaks_values = [code, g] + peaks_values
+    #     n200_wide.loc[len(n200_wide.index)] = peaks_values
+    #
+    #     p300_peaks = eeg.get_peak(channels=['P3', 'Pz', 'P4'], t_min=0.280, t_max=0.320, peak=1)
+    #     peaks_values = [p300_peaks[key] for key in columns]
+    #
+    #     peaks_values = [code, g] + peaks_values
+    #     p300_wide.loc[len(p300_wide.index)] = peaks_values
+    #
+    # n200_wide['code'] = n200_wide['code'].astype('category')
+    # n200_wide['gender'] = n200_wide['gender'].astype('category')
+    # n200_wide.to_csv('../data/jamovi-tables/h3_n200.csv', index=False)
+    #
+    # p300_wide['code'] = p300_wide['code'].astype('category')
+    # p300_wide['gender'] = p300_wide['gender'].astype('category')
+    # p300_wide.to_csv('../data/jamovi-tables/h3_p300.csv', index=False)
+
+    # TODO: h4 - n200 vs valence
 
     path = '../data/eeg/'
-    dict_info = json.load(open('../data/eeg/info.json'))
+    dict_info = json.load(open('../data/eeg/info_full.json'))
 
-    data_wide = pd.DataFrame(columns=['code', 'gender', 'blackwhite', 'blurring', 'circularblurringext',
+    n200_wide = pd.DataFrame(columns=['code', 'gender', 'blackwhite', 'blurring', 'circularblurringext',
                                       'circularblurringint', 'canny', 'original'])
-    columns = list(data_wide.columns)[2:]
+    columns = list(n200_wide.columns)[2:]
 
     for code in participant_codes:
+
         file_path = path + 'subj_' + code + '_block1.xdf'
-
-        eeg = EEGAnalysis(file_path, dict_info=dict_info)
-        eeg.create_raw()
-        eeg.set_reference()
-        eeg.filter_raw()
-        eeg.define_annotations()
-        eeg.define_epochs_raw(save_epochs=False)
-        peaks = eeg.get_n170_peak()
-
-        peaks_values = [peaks[key] for key in columns]
         g = participant_data.loc[participant_data['code'] == code]['gender'].values[0][0]
 
-        peaks_values = [code, g] + peaks_values
-        data_wide.loc[len(data_wide.index)] = peaks_values
+        eeg = EEGAnalysis(file_path, dict_info=dict_info)
+        eeg.run_raw(filtering=True)
+        eeg.define_epochs_raw(save_epochs=False)
 
-    data_wide['code'] = data_wide['code'].astype('category')
-    data_wide['gender'] = data_wide['gender'].astype('category')
-    data_wide.to_csv('../data/jamovi-tables/h3.csv')
+        n200_peaks = eeg.get_peak(mean=False, channels=['FT9', 'Fc5', 'T7', 'TP9', 'CP5'],
+                                  t_min=0.180, t_max=0.250, peak=-1)
+        peaks_values = [n200_peaks[key] for key in columns]
+
+        peaks_values = [code, g] + peaks_values
+        n200_wide.loc[len(n200_wide.index)] = peaks_values
 

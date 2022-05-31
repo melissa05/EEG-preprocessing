@@ -525,6 +525,13 @@ class EEGAnalysis:
             for condition in conditions:
                 # print(condition)
                 roi_condition_epochs = roi_epochs[list(locate(annotations, lambda x: x == condition))]
+
+                # p = plt.pcolor(x_axis, y_axis, roi_condition_epochs[0, 0], cmap='RdBu')
+                # plt.colorbar(p)
+                # plt.title(condition + ' ' + roi)
+                # plt.savefig(self.file_info['output_folder'] + '/' + condition + '_' + roi + '_spectrogram.png')
+                # plt.close()
+
                 roi_condition_epochs = np.mean(roi_condition_epochs, axis=0)
                 roi_condition_epochs = np.mean(roi_condition_epochs, axis=0)
 
@@ -559,44 +566,64 @@ class EEGAnalysis:
                 label = condition + '/' + roi
                 self.evoked[label] = condition_roi_epoch
 
-    def get_n170_peak(self, mean=True):
+    def get_peak(self, mean=True, channels=None, t_min=0.180, t_max=0.250, peak=-1):
 
+        if channels is None:
+            channels = ['FT9', 'Fc5', 'T7', 'TP9', 'CP5']
         peaks = {}
+        annotations = {}
 
         epochs_interest = self.epochs.copy()
-        epochs_interest = epochs_interest.pick_channels(['FT9', 'Fc5', 'T7', 'TP9', 'CP5'])
+        epochs_interest = epochs_interest.pick_channels(channels)
 
-        t_min = 0.160
-        t_max = 0.200
+        labels = np.squeeze(np.array(epochs_interest.get_annotations_per_epoch())[:, :, 2])
 
-        for condition in self.event_mapping.keys():
+        conditions_interest = [ann.split('/')[1] for ann in self.event_mapping.keys()]
+        conditions_interest = list(set(conditions_interest))
+
+        for condition in conditions_interest:
 
             condition_roi_epoch = epochs_interest[condition]
             data = condition_roi_epoch.crop(tmin=t_min, tmax=t_max).get_data()
-            peak_condition = []
 
-            for epoch in data:
+            condition_labels = []
+            if not mean:
+                condition_labels = [label for label in labels if condition in label]
+
+            peak_condition = []
+            latency_condition = []
+            annotation_condition = []
+
+            for idx, epoch in enumerate(data):
                 signal = np.array(epoch).mean(axis=0)
-                peak_loc, peak_mag = mne.preprocessing.peak_finder(signal, thresh=(max(signal)-min(signal))/20, extrema=-1, verbose=False)
+                peak_loc, peak_mag = mne.preprocessing.peak_finder(signal, thresh=(max(signal)-min(signal))/50,
+                                                                   extrema=peak, verbose=False)
                 peak_mag = peak_mag * 1e6
 
                 if len(peak_loc) > 1 and peak_loc[0] == 0:
                     peak_loc = peak_loc[1:]
                     peak_mag = peak_mag[1:]
+
                 if len(peak_loc) > 1 and peak_loc[-1] == (len(signal)-1):
                     peak_loc = peak_loc[:-1]
                     peak_mag = peak_mag[:-1]
 
-                # peak_loc = peak_loc[np.argmin(peak_mag)]
+                peak_loc = peak_loc[np.argmin(peak_mag)] / self.eeg_fs + t_min
                 peak_mag = np.min(peak_mag)
 
                 peak_condition.append(peak_mag)
+                latency_condition.append(peak_loc)
+
+                if not mean:
+                    annotation_condition.append(condition_labels[idx].split('/')[0])
 
             if mean:
                 peaks[condition] = np.mean(np.array(peak_condition))
             else:
                 peaks[condition] = np.array(peak_condition)
+                annotations[condition] = annotation_condition
 
+        print(annotations)
         return peaks
 
     def plot_evoked(self):
@@ -660,6 +687,16 @@ class EEGAnalysis:
         plt.savefig(path)
         plt.close()
 
+    def save_pickle(self):
+
+        epochs = np.array(self.epochs.get_data())
+        labels = np.squeeze(np.array(self.epochs.get_annotations_per_epoch())[:, :, 2])
+
+        with open('../data/pickle/'+self.file_info['file_name']+'_data.pkl', 'wb') as f:
+            pickle.dump(epochs, f)
+        with open('../data/pickle/'+self.file_info['file_name']+'_labels.pkl', 'wb') as f:
+            pickle.dump(labels, f)
+
     def run_whole(self, visualize_raw=False, save_images=True):
 
         self.create_raw()
@@ -678,12 +715,11 @@ class EEGAnalysis:
 
         # self.ica_remove_eog()
 
-        self.define_annotations()
+        self.define_annotations(full=self.input_info['full_annotation'])
         self.define_epochs_raw(save_epochs=save_images)
         if save_images:
             self.define_ers_erd_spectrogram()
         self.define_evoked()
-        self.get_n170_peak()
         if save_images:
             self.plot_evoked()
 
@@ -707,7 +743,7 @@ class EEGAnalysis:
 
         # self.ica_remove_eog()
 
-        self.define_annotations()
+        self.define_annotations(full=self.input_info['full_annotation'])
         self.raw.set_annotations(self.annotations)
 
     def run_combine_raw(self, visualize_raw=False, save_images=True, new_raws=None):
