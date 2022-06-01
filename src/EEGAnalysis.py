@@ -578,7 +578,10 @@ class EEGAnalysis:
 
         labels = np.squeeze(np.array(epochs_interest.get_annotations_per_epoch())[:, :, 2])
 
-        conditions_interest = [ann.split('/')[1] for ann in self.event_mapping.keys()]
+        if len(list(self.event_mapping.keys())[0].split('/')) > 1:
+            conditions_interest = [ann.split('/')[1] for ann in self.event_mapping.keys()]
+        else:
+            conditions_interest = self.event_mapping.keys()
         conditions_interest = list(set(conditions_interest))
 
         for condition in conditions_interest:
@@ -692,12 +695,15 @@ class EEGAnalysis:
     def save_pickle(self):
 
         epochs = np.array(self.epochs.get_data())
-        labels = np.squeeze(np.array(self.epochs.get_annotations_per_epoch())[:, :, 2])
+        labels = [annotation[0][2] for annotation in self.epochs.get_annotations_per_epoch()]
+        info = {'fs': self.eeg_fs, 'channels': self.epochs.ch_names, 'tmin': self.t_min, 'tmax': self.t_max}
 
-        with open('../data/pickle/'+self.file_info['file_name']+'_data.pkl', 'wb') as f:
+        with open('../data/pickle/'+self.file_info['subject']+'_data.pkl', 'wb') as f:
             pickle.dump(epochs, f)
-        with open('../data/pickle/'+self.file_info['file_name']+'_labels.pkl', 'wb') as f:
+        with open('../data/pickle/'+self.file_info['subject']+'_labels.pkl', 'wb') as f:
             pickle.dump(labels, f)
+        with open('../data/pickle/'+self.file_info['subject']+'_info.pkl', 'wb') as f:
+            pickle.dump(info, f)
 
     def run_whole(self, visualize_raw=False, save_images=True):
 
@@ -724,6 +730,7 @@ class EEGAnalysis:
         self.define_evoked()
         if save_images:
             self.plot_evoked()
+        self.save_pickle()
 
     def run_raw(self, visualize_raw=False, filtering=False):
 
@@ -773,11 +780,15 @@ class EEGAnalysis:
         if visualize_raw:
             self.visualize_raw()
 
-        self.ica_remove_eog()
+        # self.ica_remove_eog()
 
         self.define_epochs_raw(save_epochs=save_images, set_annotations=False)
-        self.define_ers_erd()
-        self.plot_evoked()
+        if save_images:
+            self.define_ers_erd_spectrogram()
+        self.define_evoked()
+        if save_images:
+            self.plot_evoked()
+        self.save_pickle()
 
     def __getattr__(self, name):
         return 'EEGAnalysis does not have `{}` attribute.'.format(str(name))
