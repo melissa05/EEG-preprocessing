@@ -5,20 +5,32 @@ from pathlib import Path
 import mne
 import numpy as np
 import pyxdf
-import scipy.signal
 from matplotlib import pyplot as plt
-from more_itertools import locate
+from ERDS import compute_erds
 
 
 class EEGAnalysis:
+    """
+    Class implemented for the EEG preprocessing and visualization from the reading of .xdf files
+
+    Giulia Pezzutti - Institute for Neural Engineering, @ TUGraz
+    2022/06/02
+    """
 
     def __init__(self, path, dict_info):
+        """
+        Constructor of the class: it initializes all the necessary variables, loads the xdf file with all the
+        correspondent information
+        :param path: path to .xdf file containing the data. The filepath must be with following structure:
+        *folder*/subj_*sub-code*_block*num*.xdf (e.g. "/data/subj_001_block1.xdf")
+        :param dict_info: dict containing the main information about the processing. It must contain the following keys:
+        streams, montage, filtering, spatial_filtering, samples_remove, t_min, t_max, full_annotation,
+        epochs_reject_criteria, rois, bad_epoch_names, erp, erds. See the documentation for further info about the dict
+        """
 
+        # initialize variables
         self.data_path = path
-
         self.file_info = {}
-        self.get_info_from_path()
-
         self.eeg_signal, self.eeg_instants, self.eeg_fs, self.length = None, None, None, None
         self.marker_ids, self.marker_instants = None, None
         self.channels_names, self.channels_types, self.evoked_rois = {}, {}, {}
@@ -26,10 +38,13 @@ class EEGAnalysis:
         self.events, self.event_mapping, self.epochs, self.annotations = None, None, None, None
         self.evoked = {}
 
+        # extract info from the path
+        self.get_info_from_path()
+        # extract info from the dict
         self.input_info = dict_info
-
-        self.t_min = self.input_info['t_min']  # start of each epoch (200ms before the trigger)
-        self.t_max = self.input_info['t_max']  # end of each epoch (800ms after the trigger)
+        self.t_min = self.input_info['t_min']  # start of each epoch
+        self.t_max = self.input_info['t_max']  # end of each epoch
+        # load xdf file in raw variable
         self.load_xdf()
 
     def get_info_from_path(self):
@@ -74,18 +89,25 @@ class EEGAnalysis:
         for i in range(len(dat)):
             stream_name = dat[i]['info']['name'][0]
 
-            if stream_name == stream_names['EEGMarkers']:  # gets 'BrainVision RDA Markers' stream
+            # gets 'BrainVision RDA Markers' stream
+            if stream_name == stream_names['EEGMarkers']:
                 orn_signal = dat[i]['time_series']
                 orn_instants = dat[i]['time_stamps']
 
+            # gets 'BrainVision RDA Data' stream
             if stream_name == stream_names['EEGData']:
+                # get the signal
                 self.eeg_signal = dat[i]['time_series'][:, :32]
                 self.eeg_signal = self.eeg_signal * 1e-6
+                # get the instants
                 self.eeg_instants = dat[i]['time_stamps']
+                # get the sampling frequencies
                 self.eeg_fs = int(float(dat[i]['info']['nominal_srate'][0]))
-                self.load_channels(dat[i]['info']['desc'][0]['channels'][0]['channel'])
                 effective_sample_frequency = float(dat[i]['info']['effective_srate'])
+                # load the channels from the data
+                self.load_channels(dat[i]['info']['desc'][0]['channels'][0]['channel'])
 
+            # gets 'PsychoPy' stream
             if stream_name == stream_names['Triggers']:
                 self.marker_ids = dat[i]['time_series']
                 self.marker_instants = dat[i]['time_stamps']
@@ -96,8 +118,10 @@ class EEGAnalysis:
 
         # check lost-samples problem
         if len(orn_signal) != 0:
+            print('\n\nATTENTION: some samples have been lost during the acquisition!!\n\n')
             self.fix_lost_samples(orn_signal, orn_instants, effective_sample_frequency)
 
+        # get the length of the acquisition
         self.length = self.eeg_instants.shape[0]
 
         # remove samples at the beginning and at the end
@@ -131,6 +155,7 @@ class EEGAnalysis:
             # get channel name
             self.channels_names[idx] = info['label'][0]
 
+            # solve problem with MNE and BrainProduct incompatibility
             if self.channels_names[idx] == 'FP2':
                 self.channels_names[idx] = 'Fp2'
 
@@ -180,11 +205,11 @@ class EEGAnalysis:
         Creation of MNE raw instance from the data, setting the general information and the relative montage
         """
 
-        print('\n')
+        # create info and RAW variables with MNE for the data
         self.info = mne.create_info(list(self.channels_names.values()), self.eeg_fs, list(self.channels_types.values()))
         self.raw = mne.io.RawArray(self.eeg_signal.T, self.info, first_samp=self.eeg_instants[0])
 
-        # montage setting
+        # set montage setting according to the input
         standard_montage = mne.channels.make_standard_montage(self.input_info['montage'])
         self.raw.set_montage(standard_montage)
 
@@ -199,8 +224,7 @@ class EEGAnalysis:
         viz_scaling = dict(eeg=1e-4, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
 
         if signal:
-            mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=50,
-                             highpass=0.1, lowpass=50, filtorder=8, show_first_samp=True)
+            mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=50, show_first_samp=True)
         if psd:
             self.raw.plot_psd()
             plt.close()
@@ -209,7 +233,7 @@ class EEGAnalysis:
 
     def set_reference(self):
         """
-        Resetting the reference in raw data
+        Resetting the reference in raw data according to the spatial filtering type in the input dict
         """
 
         mne.set_eeg_reference(self.raw, ref_channels=self.input_info['spatial_filtering'], copy=False)
@@ -226,16 +250,7 @@ class EEGAnalysis:
 
         # apply band-pass filter
         if not (l_freq is None and h_freq is None):
-            # iir_params = dict(order=8, ftype='butter')
-            # iir_params = mne.filter.construct_iir_filter(iir_params=iir_params, f_pass=[l_freq, h_freq],
-            #                                              sfreq=self.eeg_fs, btype='bandpass', return_copy=False, verbose=40)
-            #
-            # self.raw.filter(l_freq=l_freq, h_freq=h_freq, filter_length=self.length,
-            #                 l_trans_bandwidth=0.1, h_trans_bandwidth=0.1,
-            #                 method='iir', iir_params=iir_params, verbose=40)
-
-            self.raw.filter(l_freq=l_freq, h_freq=h_freq,
-                            l_trans_bandwidth=0.1, h_trans_bandwidth=0.1, verbose=40)
+            self.raw.filter(l_freq=l_freq, h_freq=h_freq, l_trans_bandwidth=0.1, h_trans_bandwidth=0.1, verbose=40)
 
         # apply notch filter
         if n_freq is not None:
@@ -276,6 +291,13 @@ class EEGAnalysis:
         self.raw = reconst_raw
 
     def define_annotations(self, full=False):
+        """
+        Annotations creation according to MNE definition. Annotations are extracted from markers stream data (onset,
+        duration and description)
+        :param full: annotations can be made of just one word or more than one. In 'full' case the whole annotation is
+        considered, otherwise only the second word is kept
+        :return:
+        """
 
         # generation of the events according to the definition
         triggers = {'onsets': [], 'duration': [], 'description': []}
@@ -291,6 +313,7 @@ class EEGAnalysis:
             triggers['onsets'].append(self.marker_instants[idx])
             triggers['duration'].append(int(0))
 
+            # according to 'full' parameter, extract the correct annotation description
             if not full:
                 condition = marker_data[0].split('/')[-1]
             else:
@@ -486,67 +509,6 @@ class EEGAnalysis:
                 fig.savefig(self.file_info['output_folder'] + '/' + condition + '_' + roi + '_erds.png')
                 plt.close()
 
-    def define_ers_erd_spectrogram(self, f_max=50):
-
-        rois_numbers = self.define_rois()
-
-        signals = self.epochs.get_data(picks='eeg')  # epochs x channels x instants
-
-        annotations = [annotation[0][2] for annotation in self.epochs.get_annotations_per_epoch()]
-        conditions = list(set(annotations))
-
-        freq, time, spectrogram = scipy.signal.spectrogram(signals, fs=self.eeg_fs,
-                                                           nperseg=250, noverlap=225, scaling='spectrum')
-
-        time = time + self.t_min
-        spectrogram = np.squeeze(spectrogram[:, :, np.argwhere(freq < f_max), :])
-        freq = np.squeeze(freq[np.argwhere(freq < f_max)])
-
-        last_time = time[-1] + (time[-1] - time[-2])
-        x_axis = np.insert(time, -1, last_time)
-        last_freq = freq[-1] + (freq[-1] - freq[-2])
-        y_axis = np.insert(freq, -1, last_freq)
-
-        for roi in rois_numbers.keys():
-            numbers = rois_numbers[roi]
-            roi_epochs = spectrogram[:, numbers, :, :]
-
-            reference = np.squeeze(roi_epochs[:, :, :, np.argwhere(time < 0)])
-            power_reference = np.mean(reference, axis=-1)
-
-            # todo da fare in modo più efficente
-            for idx_epoch, epoch in enumerate(roi_epochs):
-                for idx_channel, channel in enumerate(epoch):
-                    for idx_freq, freq_value in enumerate(channel):
-                        reference = power_reference[idx_epoch, idx_channel, idx_freq]
-                        for idx_sample, sample in enumerate(freq_value):
-                            roi_epochs[idx_epoch, idx_channel, idx_freq, idx_sample] = (sample - reference) / reference
-
-            for condition in conditions:
-                # print(condition)
-                roi_condition_epochs = roi_epochs[list(locate(annotations, lambda x: x == condition))]
-
-                # p = plt.pcolor(x_axis, y_axis, roi_condition_epochs[0, 0], cmap='RdBu')
-                # plt.colorbar(p)
-                # plt.title(condition + ' ' + roi)
-                # plt.savefig(self.file_info['output_folder'] + '/' + condition + '_' + roi + '_spectrogram.png')
-                # plt.close()
-
-                roi_condition_epochs = np.mean(roi_condition_epochs, axis=0)
-                roi_condition_epochs = np.mean(roi_condition_epochs, axis=0)
-
-                roi_condition_epochs = np.array(roi_condition_epochs)
-                z_min, z_max = -np.abs(roi_condition_epochs).max(), np.abs(roi_condition_epochs).max()
-                fig, ax = plt.subplots()
-                p = ax.pcolor(x_axis, y_axis, roi_condition_epochs, cmap='RdBu', snap=True, vmin=z_min, vmax=z_max)
-                ax.set_xlabel('Time (s)')
-                ax.set_ylabel('Frequency (Hz)')
-                ax.set_title(condition + ' ' + roi)
-                ax.axvline(0, color='k')
-                fig.colorbar(p, ax=ax)
-                fig.savefig(self.file_info['output_folder'] + '/' + condition + '_' + roi + '_erds.png')
-                plt.close()
-
     def define_evoked(self):
 
         rois_numbers = self.define_rois()
@@ -726,7 +688,8 @@ class EEGAnalysis:
         self.define_annotations(full=self.input_info['full_annotation'])
         self.define_epochs_raw(save_epochs=save_images)
         if save_images:
-            self.define_ers_erd_spectrogram()
+            compute_erds(epochs=self.epochs, rois=self.input_info['rois'], fs=self.eeg_fs, t_min=self.t_min,
+                         path=self.file_info['output_folder'])
         self.define_evoked()
         if save_images:
             self.plot_evoked()
@@ -784,7 +747,8 @@ class EEGAnalysis:
 
         self.define_epochs_raw(save_epochs=save_images, set_annotations=False)
         if save_images:
-            self.define_ers_erd_spectrogram()
+            compute_erds(epochs=self.epochs, rois=self.input_info['rois'], fs=self.eeg_fs, t_min=self.t_min,
+                         path=self.file_info['output_folder'])
         self.define_evoked()
         if save_images:
             self.plot_evoked()
