@@ -25,4 +25,4 @@ if __name__ == '__main__':
         raws.append(raw)
 
     eeg = EEGAnalysis(paths[0], dict_info)
-    eeg.run_combine_raw(visualize_raw=False, save_images=False, new_raws=raws)
+    eeg.run_combine_raw_epochs(visualize_raw=False, save_images=False, new_raws=raws)

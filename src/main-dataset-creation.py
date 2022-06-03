@@ -39,9 +39,9 @@ if __name__ == '__main__':
 
         eeg = EEGAnalysis(path_signals)
         eeg.create_raw()
-        eeg.filter_raw()
-        eeg.set_reference()
-        eeg.define_epochs_raw(save_epochs=False)
+        eeg.raw_time_filtering()
+        eeg.raw_spatial_filtering()
+        eeg.create_epochs()
 
         signals = eeg.get_epochs_dataframe()
         signals.to_csv('../data/eeg/signal.csv')

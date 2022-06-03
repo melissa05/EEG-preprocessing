@@ -238,14 +238,14 @@ class EEGAnalysis:
         if psd_topo:
             pass
 
-    def set_reference(self):
+    def raw_spatial_filtering(self):
         """
         Resetting the reference in raw data according to the spatial filtering type in the input dict
         """
 
         mne.set_eeg_reference(self.raw, ref_channels=self.input_info['spatial_filtering'], copy=False)
 
-    def filter_raw(self):
+    def raw_time_filtering(self):
         """
         Filter of MNE raw instance data with a band-pass filter and a notch filter
         """
@@ -263,7 +263,7 @@ class EEGAnalysis:
         if n_freq is not None:
             self.raw.notch_filter(freqs=n_freq, verbose=40)
 
-    def ica_remove_eog(self):
+    def raw_ica_remove_eog(self):
 
         n_components = list(self.channels_types.values()).count('eeg')
 
@@ -297,7 +297,7 @@ class EEGAnalysis:
         # reconst_raw.plot_psd()
         self.raw = reconst_raw
 
-    def define_annotations(self, full=False):
+    def create_annotations(self, full=False):
         """
         Annotations creation according to MNE definition. Annotations are extracted from markers stream data (onset,
         duration and description)
@@ -331,7 +331,7 @@ class EEGAnalysis:
         # define MNE annotations
         self.annotations = mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description'])
 
-    def define_epochs_raw(self, visualize_epochs=True, rois=True, set_annotations=True):
+    def create_epochs(self, visualize_epochs=True, rois=True, set_annotations=True):
         """
         Function to extract events from the marker data, generate the correspondent epochs and determine annotation in
         the raw data according to the events
@@ -405,7 +405,7 @@ class EEGAnalysis:
 
         plt.close('all')
 
-    def define_evoked(self, rois=True):
+    def create_evoked(self, rois=True):
         """
         Function to define the evoked variables starting from the epochs. The evoked will be considered separately for
         each condition present in the annotation and for each ROI (otherwise, in general for the whole dataset)
@@ -442,6 +442,81 @@ class EEGAnalysis:
 
                 # save the current evoked
                 self.evoked['mean'] = condition_epochs
+
+    def visualize_evoked(self):
+        """
+        Function to plot the computed evoked for each condition and for each region of interest
+        """
+
+        # get minimum and maximum value of the mean signals
+        min_value, max_value = np.inf, -np.inf
+        for label in self.evoked.keys():
+            data = self.evoked[label].get_data()[0]
+            min_value = min(np.min(data), min_value)
+            max_value = max(np.max(data), max_value)
+
+        # path for images saving
+        Path(self.file_info['output_folder'] + '/epochs/').mkdir(parents=True, exist_ok=True)
+
+        number_conditions = len(list(self.event_mapping.keys()))
+        path = self.file_info['output_folder'] + '/epochs/conditions.png'
+        fig, axs = plt.subplots(int(np.ceil(number_conditions/2)), 2, figsize=(25.6, 19.2))
+
+        for i, ax in enumerate(fig.axes):
+
+            if i >= number_conditions:
+                break
+
+            condition = list(self.event_mapping.keys())[i]
+
+            # extract the roi from the key name of the dictionary containing the evoked
+            correct_labels = [s for s in self.evoked.keys() if condition + '/' in s]
+            correct_short_labels = [s.split('/')[1] for s in correct_labels]
+
+            # correctly plot all evoked
+            for idx, label in enumerate(correct_labels):
+                ax.plot(self.evoked[label].times * 1000, self.evoked[label].get_data()[0],
+                        label=correct_short_labels[idx])
+
+            # draw ERP vertical lines to see the peak of interest
+            for erp in self.input_info['erp']:
+                ax.vlines(erp, ymin=min_value, ymax=max_value, linestyles='dashed')
+
+            ax.set_title(condition)
+            ax.legend()
+
+        plt.savefig(path)
+        plt.close()
+
+        path = self.file_info['output_folder'] + '/epochs/rois.png'
+        number_rois = len(list(self.rois_numbers.keys()))
+        fig, axs = plt.subplots(int(np.ceil(number_rois/2)), 2, figsize=(25.6, 19.2))
+
+        for i, ax in enumerate(fig.axes):
+
+            if i >= number_rois:
+                break
+
+            roi = list(self.rois_numbers.keys())[i]
+
+            # extract the condition from the key name of the dictionary containing the evoked
+            correct_labels = [s for s in self.evoked.keys() if '/' + roi in s]
+            correct_short_labels = [s.split('/')[0] for s in correct_labels]
+
+            # correctly plot all evoked
+            for idx, label in enumerate(correct_labels):
+                ax.plot(self.evoked[label].times * 1000, self.evoked[label].get_data()[0],
+                        label=correct_short_labels[idx])
+
+            # draw ERP vertical lines to see the peak of interest
+            for erp in self.input_info['erp']:
+                ax.vlines(erp, ymin=min_value, ymax=max_value, linestyles='dashed')
+
+            ax.set_title(roi)
+            ax.legend()
+
+        plt.savefig(path)
+        plt.close()
 
     def get_peak(self, t_min, t_max, peak, mean=True, channels=None):
         """
@@ -535,81 +610,6 @@ class EEGAnalysis:
 
         return peaks
 
-    def plot_evoked(self):
-        """
-        Function to plot the computed evoked for each condition and for each region of interest
-        """
-
-        # get minimum and maximum value of the mean signals
-        min_value, max_value = np.inf, -np.inf
-        for label in self.evoked.keys():
-            data = self.evoked[label].get_data()[0]
-            min_value = min(np.min(data), min_value)
-            max_value = max(np.max(data), max_value)
-
-        # path for images saving
-        Path(self.file_info['output_folder'] + '/epochs/').mkdir(parents=True, exist_ok=True)
-
-        number_conditions = len(list(self.event_mapping.keys()))
-        path = self.file_info['output_folder'] + '/epochs/conditions.png'
-        fig, axs = plt.subplots(int(np.ceil(number_conditions/2)), 2, figsize=(25.6, 19.2))
-
-        for i, ax in enumerate(fig.axes):
-
-            if i >= number_conditions:
-                break
-
-            condition = list(self.event_mapping.keys())[i]
-
-            # extract the roi from the key name of the dictionary containing the evoked
-            correct_labels = [s for s in self.evoked.keys() if condition + '/' in s]
-            correct_short_labels = [s.split('/')[1] for s in correct_labels]
-
-            # correctly plot all evoked
-            for idx, label in enumerate(correct_labels):
-                ax.plot(self.evoked[label].times * 1000, self.evoked[label].get_data()[0],
-                        label=correct_short_labels[idx])
-
-            # draw ERP vertical lines to see the peak of interest
-            for erp in self.input_info['erp']:
-                ax.vlines(erp, ymin=min_value, ymax=max_value, linestyles='dashed')
-
-            ax.set_title(condition)
-            ax.legend()
-
-        plt.savefig(path)
-        plt.close()
-
-        path = self.file_info['output_folder'] + '/epochs/rois.png'
-        number_rois = len(list(self.rois_numbers.keys()))
-        fig, axs = plt.subplots(int(np.ceil(number_rois/2)), 2, figsize=(25.6, 19.2))
-
-        for i, ax in enumerate(fig.axes):
-
-            if i >= number_rois:
-                break
-
-            roi = list(self.rois_numbers.keys())[i]
-
-            # extract the condition from the key name of the dictionary containing the evoked
-            correct_labels = [s for s in self.evoked.keys() if '/' + roi in s]
-            correct_short_labels = [s.split('/')[0] for s in correct_labels]
-
-            # correctly plot all evoked
-            for idx, label in enumerate(correct_labels):
-                ax.plot(self.evoked[label].times * 1000, self.evoked[label].get_data()[0],
-                        label=correct_short_labels[idx])
-
-            # draw ERP vertical lines to see the peak of interest
-            for erp in self.input_info['erp']:
-                ax.vlines(erp, ymin=min_value, ymax=max_value, linestyles='dashed')
-
-            ax.set_title(roi)
-            ax.legend()
-
-        plt.savefig(path)
-        plt.close()
-
     def save_pickle(self):
         """
         Function to save epochs, labels and main information into pickle files. The first two are saved as numpy arrays,
@@ -627,7 +627,7 @@ class EEGAnalysis:
         with open('../data/pickle/' + self.file_info['subject'] + '_info.pkl', 'wb') as f:
             pickle.dump(info, f)
 
-    def run_whole(self, visualize_raw=False, save_images=True):
+    def run_raw_epochs(self, visualize_raw=False, save_images=True):
         """
         Function to run all the methods previously reported. Attention: ICA is for now not used.
         :param visualize_raw: boolean, if raw signals should be visualized or not
@@ -640,24 +640,24 @@ class EEGAnalysis:
             self.visualize_raw()
 
         if self.input_info['spatial_filtering'] is not None:
-            self.set_reference()
+            self.raw_spatial_filtering()
 
         if self.input_info['filtering'] is not None:
-            self.filter_raw()
+            self.raw_time_filtering()
 
         if visualize_raw:
             self.visualize_raw()
 
         # self.ica_remove_eog()
 
-        self.define_annotations(full=self.input_info['full_annotation'])
-        self.define_epochs_raw(visualize_epochs=save_images)
+        self.create_annotations(full=self.input_info['full_annotation'])
+        self.create_epochs(visualize_epochs=save_images)
         if save_images:
             compute_erds(epochs=self.epochs, rois=self.input_info['rois'], fs=self.eeg_fs, t_min=self.t_min,
                          path=self.file_info['output_folder'])
-        self.define_evoked()
+        self.create_evoked()
         if save_images:
-            self.plot_evoked()
+            self.visualize_evoked()
         self.save_pickle()
 
     def run_raw(self, visualize_raw=False):
@@ -673,20 +673,20 @@ class EEGAnalysis:
             self.visualize_raw()
 
         if self.input_info['spatial_filtering'] is not None:
-            self.set_reference()
+            self.raw_spatial_filtering()
 
         if self.input_info['filtering'] is not None:
-            self.filter_raw()
+            self.raw_time_filtering()
 
         if visualize_raw:
             self.visualize_raw()
 
         # self.ica_remove_eog()
 
-        self.define_annotations(full=self.input_info['full_annotation'])
+        self.create_annotations(full=self.input_info['full_annotation'])
         self.raw.set_annotations(self.annotations)
 
-    def run_combine_raw(self, visualize_raw=False, save_images=True, new_raws=None):
+    def run_combine_raw_epochs(self, visualize_raw=False, save_images=True, new_raws=None):
         """
         Function to combine different raw data and to create the correspondent new epochs (it can be useful when the
         acquisition is in more files)
@@ -705,12 +705,12 @@ class EEGAnalysis:
             self.visualize_raw()
 
         if self.input_info['spatial_filtering'] is not None:
-            self.set_reference()
+            self.raw_spatial_filtering()
 
         if self.input_info['filtering'] is not None:
-            self.filter_raw()
+            self.raw_time_filtering()
 
-        self.define_annotations()
+        self.create_annotations()
         self.raw.set_annotations(self.annotations)
 
         new_raws.insert(0, self.raw)
@@ -721,13 +721,13 @@ class EEGAnalysis:
 
         # self.ica_remove_eog()
 
-        self.define_epochs_raw(visualize_epochs=save_images, set_annotations=False)
+        self.create_epochs(visualize_epochs=save_images, set_annotations=False)
         if save_images:
             compute_erds(epochs=self.epochs, rois=self.input_info['rois'], fs=self.eeg_fs, t_min=self.t_min,
                          path=self.file_info['output_folder'])
-        self.define_evoked()
+        self.create_evoked()
         if save_images:
-            self.plot_evoked()
+            self.visualize_evoked()
         self.save_pickle()
 
     def __getattr__(self, name):

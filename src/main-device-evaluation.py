@@ -37,7 +37,7 @@ if __name__ == '__main__':
     filename = get_subject_name(path)
     eeg = EEGAnalysis(path, removed_samples=0)
     eeg.create_raw()
-    eeg.filter_raw(l_freq=0.1, h_freq=40, n_freq=50)
+    eeg.raw_time_filtering()
     eeg.visualize_raw(psd_topo=False)
     eeg_data = eeg.get_raw_ndarray().T
 

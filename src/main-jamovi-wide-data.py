@@ -131,7 +131,7 @@ if __name__ == '__main__':
 
         eeg = EEGAnalysis(file_path, dict_info=dict_info)
         eeg.run_raw(filtering=True)
-        eeg.define_epochs_raw(save_epochs=False)
+        eeg.create_epochs()
 
         n200_peaks, n200_annotations = eeg.get_peak(mean=False, channels=['FT9', 'Fc5', 'T7', 'TP9', 'CP5'],
                                                     t_min=0.180, t_max=0.250, peak=-1)
