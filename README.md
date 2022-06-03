@@ -73,7 +73,7 @@ The following methods have been implemented inside the class:
 * `save_pickle`: to save the data of the current acquisition divided into signals, labels and info
 
 The first four methods are automatically called by the class constructor. The other methods can be called individually 
-of can be called thanks to the following functions:
+or can be called thanks to the following functions:
 * `run_raw_epochs`: to perform the whole analysis (raw creation, filtering, annotation defining, epochs division, evoked definition and pickle saving)
 * `run_raw`: to perform the analysis just regarding the raw (raw creation, filtering, annotation defining)
 * `run_combine_raw_epochs`: to perform the loading of a file, creating the correspondent filtered Raw, generate the annotations and append to it other raw files given in input. The remaining analysis is performed on the whole concatenated signal
