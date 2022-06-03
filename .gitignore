@@ -130,5 +130,5 @@ dmypy.json
 
 # Other added folders
 .idea/
-data/
-images/
+data/eeg/
+data/pickle/
