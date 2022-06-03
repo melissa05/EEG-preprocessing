@@ -1,4 +1,4 @@
-# EEGAnaysis class
+# EEGAnalysis class
 
 This class is intended to perform in a quick way the first steps of the EEG preprocessing. 
 The class implements the main preprocessing steps that can be applied to an EEG signal
