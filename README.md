@@ -61,22 +61,22 @@ The following methods have been implemented inside the class:
 * `fix_lost_samples`: to try to fix the data adding fake samples where missing
 * `create_raw`: to generate MNE Raw instance for the EEG data
 * `visualize_raw`: to visualize the signal and the psd of the loaded Raw data
-* `set_reference`: to perform spatial filtering
-* `fiter_raw`: to perform frequency filtering
-* `ica_remove_eog`: to perform ICA and reject bad components
-* `define_annotations`: to extract the Annotation instance from marker data
-* `define_epochs_raw`: to segment the signal according to the defined annotations (and eventually roi)
+* `raw_spatial_filtering`: to perform spatial filtering
+* `raw_time_filtering`: to perform frequency filtering
+* `raw_ica_remove_eog`: to perform ICA and reject bad components
+* `create_annotations`: to extract the Annotation instance from marker data
+* `create_epochs`: to segment the signal according to the defined annotations (and eventually roi)
 * `visualize_epochs`: to generate epochs plots
-* `define_evoked`: to generate the Evoked for the different annotations (and eventually roi)
-* `plot_evoked`: to plot the generated evoked
+* `create_evoked`: to generate the Evoked for the different annotations (and eventually roi)
+* `visualize_evoked`: to plot the generated evoked
 * `get_peak`: to extract peak amplitude in a time window of interest
 * `save_pickle`: to save the data of the current acquisition divided into signals, labels and info
 
 The first four methods are automatically called by the class constructor. The other methods can be called individually 
 of can be called thanks to the following functions:
-* `run_whole`: to perform the whole analysis (raw creation, filtering, annotation defining, epochs division, evoked definition and pickle saving)
+* `run_raw_epochs`: to perform the whole analysis (raw creation, filtering, annotation defining, epochs division, evoked definition and pickle saving)
 * `run_raw`: to perform the analysis just regarding the raw (raw creation, filtering, annotation defining)
-* `run_combine_raw`: to perform the loading of a file, creating the correspondent filtered Raw, generate the annotations and append to it other raw files given in input. The remaining analysis is performed on the whole concatenated signal
+* `run_combine_raw_epochs`: to perform the loading of a file, creating the correspondent filtered Raw, generate the annotations and append to it other raw files given in input. The remaining analysis is performed on the whole concatenated signal
 
 ### Work in progress
 
