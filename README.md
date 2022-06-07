@@ -99,7 +99,7 @@ The code for ERD/S maps can be found in `src/ERDS.py`. The function takes in inp
 * f_max: maximum frequency for which the ERDS maps are visualized (50 Hz by default)
 * path: folder path where to save the computed ERDS maps. If None (default), the maps are just shown
 
-###Contacts
+## Contacts
 
 For any problem, suggestion or help, feel free to contact me at the following email address:
 
