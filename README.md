@@ -17,6 +17,8 @@ and some methods for the signal characteristics visualization
 
 The methods are implemented thanks to Python 3.7 and MNE package. 
 
+## EEGAnalysis
+
 ### How to run
 
 The repository can be cloned in the computer and the requirements can be found in `requirements.txt` file. 
@@ -87,8 +89,17 @@ or can be called thanks to the following functions:
 * check on the input values 
 * fix ERDS maps frequency interval
 
+## ERDS
 
-### Contacts
+The code for ERD/S maps can be found in `src/ERDS.py`. The function takes in input:
+* epochs: Epochs MNE variable of interest
+* rois: dict object containing a set of key-value pairs. The key must be the name of the region of interest, the value is a list containing the channels belonging to that ROI
+* fs: sampling frequency of the EEG acquisition
+* t_min: time instant of the epoch (with respect to the stimuli instant)
+* f_max: maximum frequency for which the ERDS maps are visualized (50 Hz by default)
+* path: folder path where to save the computed ERDS maps. If None (default), the maps are just shown
+
+###Contacts
 
 For any problem, suggestion or help, feel free to contact me at the following email address:
 
