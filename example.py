@@ -8,4 +8,4 @@ if __name__ == '__main__':
     dict_info = json.load(open('../data/eeg/info.json'))
 
     eeg = EEGAnalysis(path, dict_info)
-    eeg.run_whole(visualize_raw=False, save_images=True)
+    eeg.run_raw_epochs(visualize_raw=True, save_images=True)
