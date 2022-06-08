@@ -82,12 +82,14 @@ or can be called thanks to the following functions:
 
 ### Work in progress
 
-* spatial filtering with a list of channels
+* spatial filtering with a list of channels and Laplacian
 * interpolation of bad channels
 * ICA for EOG
 * fix the problem of missing samples in the acquisition
 * check on the input values 
 * fix ERDS maps frequency interval
+* participant name extracted in a more general way
+* fix of relative paths
 
 ## ERDS
 
@@ -98,6 +100,24 @@ The code for ERD/S maps can be found in `src/ERDS.py`. The function takes in inp
 * t_min: time instant of the epoch (with respect to the stimuli instant)
 * f_max: maximum frequency for which the ERDS maps are visualized (50 Hz by default)
 * path: folder path where to save the computed ERDS maps. If None (default), the maps are just shown
+
+
+## Main solution to numpy-MNE problems
+
+When running the code, if you get the following error: 
+
+``mean() gor an unexpected keyword argument 'keepdims'``
+
+it's due to incompatibility problems between MNE and numpy. To fix it, you can add a cast to np.array to the variable on which the mean function is called inside the library. 
+
+If you get instead the following error: 
+
+``all the input arrays must have same number of dimensions, but the array at index 0 has 1 dimension(s) and the array at index 1 has 2 dimension(s)``
+
+you can fix the problem substituting inside the library the call of np.concatenate with the following one 
+
+``np.concatenate([l_z_pad, np.array(2* x[0] - x[n_pad[0]:0:-1]).flatten(), np.array(x).flatten(), np.array(2 * x[-1] - x[-2:-n_pad[1] - 2:-1]).flatten(), r_z_pad])``
+
 
 ## Contacts
 
