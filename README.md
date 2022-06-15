@@ -87,7 +87,6 @@ or can be called thanks to the following functions:
 * ICA for EOG
 * fix the problem of missing samples in the acquisition
 * check on the input values 
-* fix ERDS maps frequency interval
 * participant name extracted in a more general way
 
 ## ERDS
