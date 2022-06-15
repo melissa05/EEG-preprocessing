@@ -48,6 +48,7 @@ information (in quotes the keys of the different data are reported):
 * "bad_epoch_names": list containing the annotation names of the epochs to be excluded
 * "erp": list containing the time instants (in milliseconds) to be highlighted with a vertical line in ERP plot
 * "erds": list containing the lower and the higher frequencies of the frequency range to be visualized in ERDS plots 
+* "bad_channels": dict containing keys correspondent to the participant code, values containing a list of channels labelled as bad
 
 The dictionary can be previously saved in a json file and loaded every time it's needed. An example of the json file can be found in `data/eeg/info.json`.
 All the generated plots will be saved in `images/` folder, inside a sub-folder named 'subj-X', where X is the name of the participant extracted from the input path.  
@@ -83,13 +84,11 @@ or can be called thanks to the following functions:
 ### Work in progress
 
 * spatial filtering with a list of channels and Laplacian
-* interpolation of bad channels
 * ICA for EOG
 * fix the problem of missing samples in the acquisition
 * check on the input values 
 * fix ERDS maps frequency interval
 * participant name extracted in a more general way
-* fix of relative paths
 
 ## ERDS
 
@@ -98,9 +97,11 @@ The code for ERD/S maps can be found in `src/ERDS.py`. The function takes in inp
 * rois: dict object containing a set of key-value pairs. The key must be the name of the region of interest, the value is a list containing the channels belonging to that ROI
 * fs: sampling frequency of the EEG acquisition
 * t_min: time instant of the epoch (with respect to the stimuli instant)
+* f_min: minimum frequency for which the ERDS maps are visualized (50 Hz by default)
 * f_max: maximum frequency for which the ERDS maps are visualized (50 Hz by default)
 * path: folder path where to save the computed ERDS maps. If None (default), the maps are just shown
 
+ERDS maps are also implemented for epochs in numpy matrix (#epochs x #channels x #samples) variables and annotations in numpy arrays (#epochs).
 
 ## Main solution to numpy-MNE problems
 
