@@ -37,7 +37,7 @@ information (in quotes the keys of the different data are reported):
     * "low": low bound for the band-pass filtering
     * "high": high bound for the band-pass filtering
     * "notch": frequency for the notch filtering
-* "spatial_filtering": string containing the name of the type of spatial filtering to be performed. It can be 'average' or 'REST'
+* "spatial_filtering": string containing the name of the type of spatial filtering to be performed. It can be 'average' or 'REST'. It can also contain a list of string containing the name(s) of the channel(s) used to construct the reference 
 * "samples_remove": int value for the number of samples to be removed at the beginning and at the end of the raw signal
 * "t_min": time instant (in seconds) of the beginning of the epochs with respect to the marker
 * "t_max": time instant (in seconds) of the end of the epochs with respect to the marker
@@ -84,7 +84,7 @@ or can be called thanks to the following functions:
 
 ### Work in progress
 
-* spatial filtering with a list of channels and Laplacian
+* Spatial filtering with Laplacian
 * ICA for EOG
 * fix the problem of missing samples in the acquisition
 * check on the input values 
