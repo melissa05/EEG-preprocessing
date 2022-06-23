@@ -27,6 +27,7 @@ To run the whole analysis, it's necessary to create an instance of the class and
 The constructor of the class takes in input the path to the .xdf file and a dictionary containing the following 
 information (in quotes the keys of the different data are reported):
 
+* "lsl-version": string for the lsl version used for the acquisition. It can be "1.12" or "1.16"
 * "streams": a dictionary containing the names of the streams of interest contained in the xdf file
     * "EEGMarkers": name of the marker stream sent by the EEG acquisition device
     * "EEGData": name of the EEG stream sent by the EEG acquisition device
@@ -87,7 +88,6 @@ or can be called thanks to the following functions:
 * ICA for EOG
 * fix the problem of missing samples in the acquisition
 * check on the input values 
-* participant name extracted in a more general way
 
 ## ERDS
 
