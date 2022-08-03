@@ -45,10 +45,10 @@ class EEGAnalysis:
         self.evoked = {}
         self.rois_numbers = {}
 
-        # extract info from the path
-        self.get_info_from_path()
         # extract info from the dict
         self.input_info = dict_info
+        # extract info from the path
+        self.get_info_from_path()
         self.t_min = self.input_info['t_min']  # start of each epoch
         self.t_max = self.input_info['t_max']  # end of each epoch
         # load xdf file in raw variable
@@ -83,7 +83,7 @@ class EEGAnalysis:
         output_folder = str(pathlib.Path(__file__).parent.parent.absolute()) + '/images/sub-' + subject
         Path(output_folder).mkdir(parents=True, exist_ok=True)
 
-        self.file_info = {'input_folder': folder, 'file_name': file_name, 'subject': subject, 
+        self.file_info = {'input_folder': folder, 'file_name': file_name, 'subject': subject,
                           'output_images_folder': output_folder, 'project_folder': project_folder}
 
     def load_xdf(self):
