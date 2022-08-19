@@ -21,168 +21,275 @@ class EEGAnalysis:
     M.Sc. Luis Alberto Barradas Chacon
 
     Institute for Neural Engineering, @ TUGraz
+
+    :ivar xdf_paths: Filepaths of xdf files to be read.
+    :vartype xdf_paths: list[str]
+    :ivar file_info: Holds information regarding input and output files and directories.
+    :vartype file_info: dict
+    :ivar eeg_fs: Sampling frequency of EEG signals.
+    :vartype eeg_fs: int
+    :ivar eeg_signals: List of EEG time series; one array per xdf file.
+    :vartype eeg_signals: list(:class:`numpy.ndarray`)
+    :ivar eeg_instants: List of EEG timestamps; one array per xdf file.
+    :vartype eeg_instants: list(:class:`numpy.ndarray`)
+    :ivar marker_ids: List of (PsychoPy) markers; one list of lists per xdf file (each innermost list contains one
+        marker).
+    :vartype marker_ids: list(list(list(str)))
+    :ivar marker_instants: List of marker timestamps; one array per xdf file.
+    :vartype marker_instants: list(:class:`numpy.ndarray`)
+    :ivar channels_names: Dictionary of all channels with numbers as keys and names as values.
+    :vartype channels_names: dict
+    :ivar channels_types: Dictionary of channel types with numbers as keys and types as values.
+    :vartype channels_types: dict
+    :ivar evoked_rois:
+    :vartype evoked_rois:
+    :ivar info: Info object with information about sensors and methods of measurement.
+    :vartype info: :class:`mne.Info`
+    :ivar raw: Instance of mne RawArray object, holding eeg raw data and related information, like channels names.
+    :vartype raw: :class:`mne.io.RawArray`
+    :ivar bad_channels: Names of all the bad channels.
+    :vartype bad_channels: list[str]
+    :ivar events: Array of events as returned by :func:`mne.events_from_annotations`.
+    :vartype events: :class:`numpy.ndarray` [int]
+    :ivar event_mapping: Event ids as returned by :func:`mne.events_from_annotations`.
+    :vartype event_mapping: dict
+    :ivar epochs: Epochs extracted from attribute :attr:`raw`.
+    :vartype epochs: :class:`mne.Epochs`
+    :ivar annotations: List of time series annotations; one instance per xdf file.
+    :vartype annotations: list[:class:`mne.Annotations`]
+    :ivar evoked:
+    :vartype evoked: dict
+    :ivar rois_numbers: Dictionary of different rois with roi names as keys and lists of channel indices as values.
+    :vartype rois_numbers: dict
+    :ivar input_info: The parameter `dict_info` passed to the class constructor.
+    :vartype input_info: dict
+    :ivar t_min:
+    :vartype t_min:
+    :ivar t_max:
+    :vartype t_max:
     """
 
-    def __init__(self, path, dict_info):
+    def __init__(self, paths, dict_info):
         """
-        Constructor of the class: it initializes all the necessary variables, loads the xdf file with all the
-        correspondent information
-        :param path: path to .xdf file containing the data. The filepath must be with following structure:
-        *folder*/subj_*sub-code*_block*num*.xdf (e.g. "/data/subj_001_block1.xdf")
+        *Constructor* of the class: it initializes all the necessary variables, loads the xdf file with all the
+        correspondent information.
+
+        Calls :meth:`get_info_from_path` and :meth:`load_raws_from_xdfs`.
+
+        :param paths: paths to .xdfs file containing the data. The filepath must be with following structure:
+            <folder>/sub-<sub-code>_block<num>.xdf (e.g. "/data/subj_001_block1.xdf").
+        :type paths: list[str] | str
         :param dict_info: dict containing the main information about the processing. It must contain the following keys:
-        streams, montage, filtering, spatial_filtering, samples_remove, t_min, t_max, full_annotation,
-        epochs_reject_criteria, rois, bad_epoch_names, erp, erds. See the documentation for further info about the dict
+            streams, montage, filtering, spatial_filtering, samples_remove, t_min, t_max, full_annotation,
+            annotation_durations, epochs_reject_criteria, rois, bad_epoch_names, erp, erds. See the documentation for
+            further info about the dict.
+        :type dict_info: dict
         """
 
-        # initialize variables
-        self.data_path = path
+        # Initialize variables:
+        self.xdf_paths = paths if isinstance(paths, list) else [paths]
         self.file_info = {}
-        self.eeg_signal, self.eeg_instants, self.eeg_fs, self.length = None, None, None, None
-        self.marker_ids, self.marker_instants = None, None
+        self.eeg_fs = None
+        self.eeg_signals, self.eeg_instants = [], []
+        self.marker_ids, self.marker_instants = [], []
         self.channels_names, self.channels_types, self.evoked_rois = {}, {}, {}
         self.info, self.raw, self.bad_channels = None, None, None
         self.events, self.event_mapping, self.epochs, self.annotations = None, None, None, None
         self.evoked = {}
         self.rois_numbers = {}
 
-        # extract info from the dict
+        # Extract info from the dict:
         self.input_info = dict_info
-        # extract info from the path
+        # Extract info from the path:
         self.get_info_from_path()
         self.t_min = self.input_info['t_min']  # start of each epoch
         self.t_max = self.input_info['t_max']  # end of each epoch
-        # load xdf file in raw variable
-        self.load_xdf()
+        # Load xdf files into raw variable:
+        self.load_raws_from_xdf()
 
     def get_info_from_path(self):
         """
-        Getting main information from file path regarding subject, folder and output folder according to
-        LSLRecorder standard
+        Gets main information from file path regarding subject, folder and output folder and saves that information in
+        attribute :attr:`file_info`.
         """
 
-        # get name of the original file
-        base = os.path.basename(self.data_path)
-        file_name = os.path.splitext(base)[0]
+        # Get names of the xdf files to be loaded:
+        file_names = [os.path.splitext(f)[0] for f in self.xdf_paths]
 
-        # main folder in which data is contained
-        base = os.path.abspath(self.data_path)
+        # Get main folder in which data is contained:
+        base = os.path.abspath(self.xdf_paths[0])
         folder = os.path.dirname(base).split('data/')[0]
         folder = folder.replace('\\', '/')
         
         project_folder = str(pathlib.Path(__file__).parent.parent.absolute())
 
-        # extraction of subject, session and run indexes
+        # Extraction of subject number and task:
         if self.input_info['lsl-version'] == '1.12':
-            subject = (file_name.split('subj_')[1]).split('_block')[0]
+            subject = (file_names[0].split('subj_')[1]).split('_block')[0]
         elif self.input_info['lsl-version'] == '1.16':
-            subject = (file_name.split('sub-')[1]).split('_ses')[0]
+            if '_task-' in file_names[0]:
+                subject = (file_names[0].split('sub-')[1]).split('_task')[0]
+            else:
+                subject = (file_names[0].split('sub-')[1]).split('_ses')[0]
         else:
             subject = ''
 
-        # output folder according to the standard
+        if '_task-' in file_names[0]:
+            task = (file_names[0].split('_task-')[1]).split('_run')[0]
+        else:
+            task = ''
+
+        # Output folder according to the standard:
         output_folder = str(pathlib.Path(__file__).parent.parent.absolute()) + '/images/sub-' + subject
         Path(output_folder).mkdir(parents=True, exist_ok=True)
 
-        self.file_info = {'input_folder': folder, 'file_name': file_name, 'subject': subject,
+        self.file_info = {'input_folder': folder, 'file_names': file_names, 'subject': subject, 'task': task,
                           'output_images_folder': output_folder, 'project_folder': project_folder}
 
-    def load_xdf(self):
+    def load_xdf(self, xdf_path):
         """
-        Load of .xdf file from the filepath given in input to the constructor. The function automatically divides the
-        different streams in the file and extract their main information
+        Loads xdf file from the filepath given in input. The function automatically divides the different streams in
+        the file according to the stream names given in attribute :attr:`input_info` and extracts their main
+        information. Saves the sampling frequency of the EEG acquisition in attribute :attr:`eeg_fs`. Appends EEG and
+        marker data of given file to attributes :attr:`eeg_signals`, :attr:`eeg_instants`, :attr:`marker_ids`,
+        and :attr:`marker_instants`.
+
+        Calls :meth:`load_channels`. Optionally calls :meth:`_fix_lost_samples`.
+
+        :param xdf_path: Path to the xdf file to be loaded (whole path from project directory).
+        :type xdf_path: str
         """
 
         stream_names = self.input_info['streams']
 
-        # data loading
-        dat = pyxdf.load_xdf(self.data_path)[0]
+        # Load data:
+        dat = pyxdf.load_xdf(xdf_path)[0]
 
         orn_signal, orn_instants = [], []
         effective_sample_frequency = None
 
-        # data iteration to extract the main information
+        # Data iteration to extract the main information:
         for i in range(len(dat)):
             stream_name = dat[i]['info']['name'][0]
 
-            # gets 'BrainVision RDA Markers' stream
+            # Gets 'BrainVision RDA Markers' stream:
             if stream_name == stream_names['EEGMarkers']:
                 orn_signal = dat[i]['time_series']
                 orn_instants = dat[i]['time_stamps']
 
-            # gets 'BrainVision RDA Data' stream
+            # Gets 'BrainVision RDA Data' stream:
             if stream_name == stream_names['EEGData']:
-                # get the signal
-                self.eeg_signal = dat[i]['time_series'][:, :32]
-                self.eeg_signal = self.eeg_signal * 1e-6
-                # get the instants
-                self.eeg_instants = dat[i]['time_stamps']
-                # get the sampling frequencies
+                # EEG signal:
+                eeg_signal = dat[i]['time_series'][:, :32]  # Number of EEG channels should not be hardcoded.
+                eeg_signal = eeg_signal * 1e-6
+                # EEG time instants:
+                eeg_instants = dat[i]['time_stamps']
+                # Sampling frequencies:
                 self.eeg_fs = int(float(dat[i]['info']['nominal_srate'][0]))
                 effective_sample_frequency = float(dat[i]['info']['effective_srate'])
-                # load the channels from the data
+                # Load the channels from the data:
                 self.load_channels(dat[i]['info']['desc'][0]['channels'][0]['channel'])
 
-            # gets 'PsychoPy' stream
+            # Gets 'PsychoPy' (cues) stream:
             if stream_name == stream_names['Triggers']:
-                self.marker_ids = dat[i]['time_series']
-                self.marker_instants = dat[i]['time_stamps']
+                marker_ids = dat[i]['time_series']
+                marker_instants = dat[i]['time_stamps']
 
-        # cast to arrays
-        self.eeg_instants = np.array(self.eeg_instants)
-        self.eeg_signal = np.asmatrix(self.eeg_signal)
+        # Cast to array:
+        eeg_instants = np.array(eeg_instants)
+        # eeg_signal = np.asmatrix(eeg_signal)
 
-        # check lost-samples problem
+        # Check lost-samples problem:
         if len(orn_signal) != 0:
             print('\n\nATTENTION: some samples have been lost during the acquisition!!\n\n')
-            self.fix_lost_samples(orn_signal, orn_instants, effective_sample_frequency)
+            self._fix_lost_samples(orn_signal, orn_instants, effective_sample_frequency)
 
-        # get the length of the acquisition
-        self.length = self.eeg_instants.shape[0]
-
-        # remove samples at the beginning and at the end
+        # Remove samples at the beginning and at the end of EEG:
+        length = eeg_instants.shape[0]
         samples_to_be_removed = self.input_info['samples_remove']
         if samples_to_be_removed > 0:
-            self.eeg_signal = self.eeg_signal[samples_to_be_removed:self.length - samples_to_be_removed]
-            self.eeg_instants = self.eeg_instants[samples_to_be_removed:self.length - samples_to_be_removed]
+            eeg_signal = eeg_signal[samples_to_be_removed:(length - samples_to_be_removed)]
+            eeg_instants = eeg_instants[samples_to_be_removed:(length - samples_to_be_removed)]
 
-        # reference all the markers instant to the eeg instants (since some samples at the beginning of the
+        # Reference all the marker instants to the eeg instants (since some samples at the beginning of the
         # recording have been removed)
-        self.marker_instants -= self.eeg_instants[0]
-        self.marker_instants = self.marker_instants[self.marker_instants >= 0]
+        marker_instants -= eeg_instants[0]
+        marker_instants = marker_instants[marker_instants >= 0]
 
-        # remove signal mean
-        self.eeg_signal = self.eeg_signal - np.mean(self.eeg_signal, axis=0)
+        # Remove signal mean:
+        eeg_signal = eeg_signal - np.mean(eeg_signal, axis=0)
+
+        # Save data in attributes:
+        self.eeg_signals.append(eeg_signal)
+        self.eeg_instants.append(eeg_instants)
+        self.marker_ids.append(marker_ids)
+        self.marker_instants.append(marker_instants)
+
+    def load_raws_from_xdf(self):
+        """
+        Loads one or multiple xdf files into a raw object which is saved in the attribute :attr:`raw`. Populates
+        attribute :attr:`info`.
+
+        Gets called by constructor.
+
+        Calls :meth:`load_xdf`, :meth:`create_annotations`, and :meth:`create_raw`.
+        """
+
+        # Load file after file:
+        for path in self.xdf_paths:
+            self.load_xdf(path)
+
+        # Create mne.Info object.
+        self.info = mne.create_info(list(self.channels_names.values()), self.eeg_fs, list(self.channels_types.values()))
+
+        self.create_annotations(full=self.input_info['full_annotation'])  # Cues (from PsychoPy).
+
+        # Create one Raw object for each xdf file, then concatenate them in the end:
+        raws = []
+        for i in range(len(self.eeg_signals)):
+            raw = self.create_raw(self.eeg_signals[i], self.eeg_instants[i])
+            raw.set_annotations(self.annotations[i])
+            raws.append(raw)
+        self.raw = mne.concatenate_raws(raws)
 
     def load_channels(self, dict_channels):
         """
-        Upload channels name from a xdf file
+        Loads channel names and types and saves them in attributes :attr:`channels_names` and :attr:`channels_types`.
+        Also checks for bad channels in attribute :attr:`input_info` and saves their names in attribute
+        :attr:`bad_channels`.
+
+        :param dict_channels: Channel information loaded from an xdf file.
+        :type dict_channels: dict
         """
 
         # x = data[0][0]['info']['desc'][0]["channels"][0]['channel']
         # to obtain the default-dict list of the channels from the original file (data, not dat!!)
 
-        # cycle over the info of the channels
+        # Iterate over the info of the channels:
         for idx, info in enumerate(dict_channels):
 
             if info['label'][0].find('dir') != -1 or info['label'][0] == 'MkIdx':
                 continue
 
-            # get channel name
+            # Get channel name:
             self.channels_names[idx] = info['label'][0]
 
-            # solve problem with MNE and BrainProduct incompatibility
+            # Solve problem with MNE and BrainProduct incompatibility:
             if self.channels_names[idx] == 'FP2':
                 self.channels_names[idx] = 'Fp2'
 
-            # get channel type
+            # Get channel type:
             self.channels_types[idx] = 'eog' if info['label'][0].find('EOG') != -1 else 'eeg'
 
+        # Get bad channels for given subject:
         if self.file_info['subject'] in self.input_info['bad_channels'].keys():
             self.bad_channels = self.input_info['bad_channels'][self.file_info['subject']]
         else:
             self.bad_channels = []
 
-    def fix_lost_samples(self, orn_signal, orn_instants, effective_sample_frequency):
+    def _fix_lost_samples(self, orn_signal, orn_instants, effective_sample_frequency):
+        # I am not sure this method is finished? There is no return and also no attribute changed?? Plus it wouldn't
+        # work with my (Melissa's) changes now, as I have changed self.eeg_instants as well as self.eeg_signals.
 
         print('BrainVision RDA Markers: ', orn_signal)
         print('BrainVision RDA Markers instants: ', orn_instants)
@@ -190,7 +297,7 @@ class EEGAnalysis:
         print('Effective srate: ', effective_sample_frequency)
 
         print('Total number of samples: ', len(self.eeg_instants))
-        final_count = len(self.eeg_signal)
+        final_count = len(self.eeg_signals)
         for lost in orn_signal:
             final_count += int(lost[0].split(': ')[1])
         print('Number of samples with lost samples integration: ', final_count)
@@ -220,74 +327,95 @@ class EEGAnalysis:
 
             new_marker_signal[(x + 1):] = np.array(new_marker_signal[(x + 1):]) + additional_time
 
-    def create_raw(self):
+    def create_raw(self, eeg_signal, eeg_instants):
         """
-        Creation of MNE raw instance from the data, setting the general information and the relative montage.
-        Create also the dictionary for the regions of interest according to the current data file
+        Creates MNE RawArray instance from the data, setting the general information and the relative montage.
+        Also creates the dictionary for the regions of interest according to the current data file and saves is in
+        attribute :attr:`rois_numbers`.
+
+        :param eeg_signal: EEG time series.
+        :type eeg_signal: :class:`numpy.ndarray`
+        :param eeg_instants: EEG timestamps.
+        :type eeg_instants: :class:`numpy.ndarray`
+        :returns: Instance of mne RawArray object which was created with the given input.
+        :rtype: :class:`mne.io.RawArray`
         """
 
-        # create info and RAW variables with MNE for the data
-        self.info = mne.create_info(list(self.channels_names.values()), self.eeg_fs, list(self.channels_types.values()))
-        self.raw = mne.io.RawArray(self.eeg_signal.T, self.info, first_samp=self.eeg_instants[0])
+        # Create RawArray with MNE for the data:
+        raw = mne.io.RawArray(eeg_signal.T, self.info, first_samp=eeg_instants[0])
 
-        # set montage setting according to the input
+        # Set montage setting according to the input:
         standard_montage = mne.channels.make_standard_montage(self.input_info['montage'])
-        self.raw.set_montage(standard_montage)
+        raw.set_montage(standard_montage)
 
+        # Check for bad channels:
         if len(self.bad_channels) > 0:
-            self.raw.info['bads'] = self.bad_channels
-            self.raw.interpolate_bads(reset_bads=True)
+            raw.info['bads'] = self.bad_channels
+            raw.interpolate_bads(reset_bads=True)
 
+        # Channel numbers associated to each roi:
         rois = self.input_info['rois']
-
-        # channel numbers associated to each roi
         for roi in rois.keys():
-            self.rois_numbers[roi] = np.array([self.raw.ch_names.index(i) for i in rois[roi]])
+            self.rois_numbers[roi] = np.array([raw.ch_names.index(i) for i in rois[roi]])
 
-    def visualize_raw(self, signal=True, psd=True, psd_topo=True):
-        """
-        Visualization of the plots that could be generated with MNE according to a scaling property
-        :param signal: boolean, if the signal plot should be generated
-        :param psd: boolean, if the psd plot should be generated
-        :param psd_topo: boolean, if the topographic psd plot should be generated
-        """
+        return raw
 
-        viz_scaling = dict(eeg=1e-4, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)
+    def visualize_eeg(self, signal=True, psd=True, psd_topo=False, sensors=False):
+        """
+        Visualization of raw data using different plots generated with MNE.
+
+        :param signal: Whether the raw time signal plot should be generated.
+        :type signal: bool
+        :param psd: Whether the psd plot should be generated.
+        :type psd: bool
+        :param psd_topo: Whether the topographic psd plot should be generated.
+        :type psd_topo: bool
+        :param sensors: Whether the sensors plot (electrode positions) should be generated.
+        :type sensors: bool
+        """
 
         if signal:
+            viz_scaling = dict(eeg=1e-4, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)  # Custom scaling for signals.
             mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=50, show_first_samp=True)
         if psd:
             self.raw.plot_psd()
-            plt.close()
         if psd_topo:
-            pass
+            self.raw.plot_psd_topo()
+            plt.show()
+        if sensors:
+            self.raw.plot_sensors(kind='topomap', ch_type='eeg', show_names=True)
+            plt.show()
 
     def raw_spatial_filtering(self):
         """
-        Resetting the reference in raw data according to the spatial filtering type in the input dict
+        Resets the reference in raw data in attribute :attr:`raw` according to the spatial filtering type in the input
+        dict.
         """
 
         mne.set_eeg_reference(self.raw, ref_channels=self.input_info['spatial_filtering'], copy=False)
 
     def raw_time_filtering(self):
         """
-        Filter of MNE raw instance data with a band-pass filter and a notch filter
+        Filter raw data in attribute :attr:`raw` with a band-pass filter and a notch filter.
         """
 
-        # extract the frequencies for the filtering
+        # Extract the frequencies for the filters:
         l_freq = self.input_info['filtering']['low']
         h_freq = self.input_info['filtering']['high']
         n_freq = self.input_info['filtering']['notch']
 
-        # apply band-pass filter
+        # Apply band-pass filter (single segments that were concatenated are filtered separately):
         if not (l_freq is None and h_freq is None):
-            self.raw.filter(l_freq=l_freq, h_freq=h_freq, l_trans_bandwidth=0.1, h_trans_bandwidth=0.1, verbose=40)
+            self.raw.filter(l_freq=l_freq, h_freq=h_freq, l_trans_bandwidth=0.1, h_trans_bandwidth=0.1,
+                            skip_by_annotation=('edge', 'bad_acq_skip'), verbose=40)
 
-        # apply notch filter
+        # Apply notch filter:
         if n_freq is not None:
             self.raw.notch_filter(freqs=n_freq, verbose=40)
 
     def raw_ica_remove_eog(self):
+        # I am not sure how exactly this works? Does it not take EOG channels? Afterwards, there are still blinks in
+        # the raw data...
 
         n_components = list(self.channels_types.values()).count('eeg')
 
@@ -324,103 +452,117 @@ class EEGAnalysis:
     def create_annotations(self, full=False):
         """
         Annotations creation according to MNE definition. Annotations are extracted from markers stream data (onset,
-        duration and description)
-        :param full: annotations can be made of just one word or more than one. In 'full' case the whole annotation is
-        considered, otherwise only the second word is kept
-        :return:
+        duration and description) and saved in attribute :attr:`annotations`.
+
+        :param full: Annotations can be made of just one word or more than one. In 'full' case the whole annotation is
+            considered, otherwise only the second word is kept.
+        :type full: bool
         """
 
-        # generation of the events according to the definition
-        triggers = {'onsets': [], 'duration': [], 'description': []}
+        annotations = []
 
-        # read every trigger in the stream
-        for idx, marker_data in enumerate(self.marker_ids):
+        # Read every trigger in the stream:
+        for idx_out, marker_ids in enumerate(self.marker_ids):
 
-            # annotations to be rejected
-            if marker_data[0] in self.input_info['bad_epoch_names']:
-                continue
+            # Generation of the events according to the definition:
+            triggers = {'onsets': [], 'duration': [], 'description': []}
+            for idx, marker_data in enumerate(marker_ids):
 
-            # extract triggers information
-            triggers['onsets'].append(self.marker_instants[idx])
-            triggers['duration'].append(int(0))
+                # Annotations to be rejected:
+                if marker_data[0] in self.input_info['bad_epoch_names']:
+                    continue
 
-            # according to 'full' parameter, extract the correct annotation description
-            if not full:
-                condition = marker_data[0].split('/')[-1]
-            else:
-                condition = marker_data[0]
-            if condition == 'edges': condition = 'canny'
-            triggers['description'].append(condition)
+                # Extract triggers information:
+                triggers['onsets'].append(self.marker_instants[idx_out][idx])
+                triggers['duration'].append(self.input_info['annotation_durations'][marker_data[0]])
 
-        # define MNE annotations
-        self.annotations = mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description'])
+                # According to 'full' parameter, extract the correct annotation description:
+                if not full:
+                    condition = marker_data[0].split('/')[-1]
+                else:
+                    condition = marker_data[0]
+                if condition == 'edges': condition = 'canny'
+                triggers['description'].append(condition)
 
-    def create_epochs(self, visualize_epochs=True, rois=True, set_annotations=True):
+            annotations.append(mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description']))
+
+        # Save MNE annotations:
+        self.annotations = annotations
+
+    def create_epochs(self, visualize_epochs=False, rois=True):
         """
-        Function to extract events from the marker data, generate the correspondent epochs and determine annotation in
-        the raw data according to the events
-        :param visualize_epochs: boolean variable to select if generate epochs plots or not
-        :param rois: boolean variable to select if visualize results according to the rois or for each channel
-        :param set_annotations: boolean variable, if it's necessary to set the annotations or not
+        Creates mne epochs and saves them in attribute :attr:`epochs`.
+
+        In order to do so, events and event mapping are created from the annotated raw data in attribute :attr:`raw`
+        and are saved in the attributes :attr:`events` and :attr:`event_mapping`.
+
+        Optionally calls :meth:`visualize_epochs`.
+
+        :param visualize_epochs: Whether to generate epochs plots or not.
+        :type visualize_epochs: bool
+        :param rois: Whether to visualize results according to the rois or for each channel. Only has an effect if
+            `visualize_epochs` is `True`.
+        :type rois: bool
         """
 
-        # set the annotations on the current raw and extract the correspondent events
-        if set_annotations:
-            self.raw.set_annotations(self.annotations)
+        # Create events and the event mapping from annotations already stored in raw:
         self.events, self.event_mapping = mne.events_from_annotations(self.raw)
 
         # Automatic rejection criteria for the epochs
         reject_criteria = self.input_info['epochs_reject_criteria']
 
-        # generation of the epochs according to the events
+        # Generation of the epochs according to the events:
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping, preload=True,
                                  baseline=(self.t_min, 0), reject=reject_criteria, tmin=self.t_min, tmax=self.t_max)
 
+        # Plot epochs, if wanted:
         if visualize_epochs:
-            self.visualize_epochs(signal=False, conditional_epoch=True, rois=rois)
+            self.visualize_epochs(conditional_epoch=True, rois=rois)
 
-    def visualize_epochs(self, signal=True, conditional_epoch=True, rois=True):
+    def visualize_epochs(self, conditional_epoch=True, rois=True):
         """
-        :param signal: boolean, if visualize the whole signal with triggers or not
+        Saves plots of mean epoch signal.
+
+        Still needs to be checked properly.
+
         :param conditional_epoch: boolean, if visualize the epochs extracted from the events or the general mean epoch
-        :param rois: boolean (only if conditional_epoch=True), if visualize the epochs according to the rois or not
+        :type conditional_epoch: bool
+        :param rois: Whether to visualize the epochs according to the rois; only if `conditional_epoch` = `True`.
+        :type rois: bool
         """
-
-        self.visualize_raw(signal=signal, psd=False, psd_topo=False)
 
         rois_names = list(self.rois_numbers.keys())
 
-        # generate the mean plots according to the condition in the annotation value
+        # Generate the mean plots according to the condition in the annotation value:
         if conditional_epoch:
-
-            # generate the epochs plots according to the roi and save them
+            # Generate the epochs plots according to the roi and save them:
             if rois:
                 for condition in self.event_mapping.keys():
                     images = self.epochs[condition].plot_image(combine='mean', group_by=self.rois_numbers, show=False)
                     for idx, img in enumerate(images):
-                        img.savefig(self.file_info['output_images_folder'] + '/' + condition + '_' + rois_names[idx] + '.png')
+                        img.savefig(self.file_info['output_images_folder'] + '/' + condition + '_' + rois_names[idx]
+                                    + '.png')
                         plt.close(img)
 
-            # generate the epochs plots for each channel and save them
+            # Generate the epochs plots for each channel and save them:
             else:
                 for condition in self.event_mapping.keys():
                     images = self.epochs[condition].plot_image(show=False)
                     for idx, img in enumerate(images):
-                        img.savefig(
-                            self.file_info['output_images_folder'] + '/' + condition + '_' + self.channels_names[idx] + '.png')
+                        img.savefig(self.file_info['output_images_folder'] + '/' + condition + '_' +
+                                    self.channels_names[idx] + '.png')
                         plt.close(img)
 
-        # generate the mean plot considering all the epochs conditions
+        # Generate the mean plot considering all the epochs conditions:
         else:
-
-            # generate the epochs plots according to the roi and save them
+            # Generate the epochs plots according to the roi and save them:
             if rois:
                 images = self.epochs.plot_image(combine='mean', group_by=self.rois_numbers, show=False)
                 for idx, img in enumerate(images):
                     img.savefig(self.file_info['output_images_folder'] + '/' + rois_names[idx] + '.png')
                     plt.close(img)
 
-            # generate the epochs plots for each channel and save them
+            # Generate the epochs plots for each channel and save them:
             else:
                 images = self.epochs.plot_image(show=False)
                 for idx, img in enumerate(images):
@@ -432,8 +574,10 @@ class EEGAnalysis:
     def create_evoked(self, rois=True):
         """
         Function to define the evoked variables starting from the epochs. The evoked will be considered separately for
-        each condition present in the annotation and for each ROI (otherwise, in general for the whole dataset)
-        :param rois: boolean variable to select if visualize results according to the rois or just the  general results
+        each condition present in the annotation and for each ROI (otherwise, in general for the whole dataset).
+
+        :param rois: Whether to visualize results according to the rois or just the general results.
+        :type rois: bool
         """
 
         # for each condition
@@ -469,7 +613,7 @@ class EEGAnalysis:
 
     def visualize_evoked(self):
         """
-        Function to plot the computed evoked for each condition and for each region of interest
+        Function to plot the computed evoked for each condition and for each region of interest.
         """
 
         # get minimum and maximum value of the mean signals
@@ -545,14 +689,15 @@ class EEGAnalysis:
     def get_peak(self, t_min, t_max, peak, mean=True, channels=None):
         """
         Function to extract the peaks' amplitude from the epochs separately for each condition found and returns them
-        or the mean value
+        or the mean value.
+
         :param t_min: lower bound of the time window in which the algorithm should look for the peak
         :param t_max: upper bound of the time window in which the algorithm should look for the peak
         :param peak: +1 for a positive peak, -1 for a negative peak
         :param mean: boolean value, if the return value should be the mean value or the list of amplitudes
         :param channels: list of channels name to be investigated. If None, all the channels are considered
         :return: if mean=True, mean amplitude value; otherwise list of detected peaks' amplitude and list of the
-        correspondent annotations
+            correspondent annotations
         """
 
         if channels is None:
@@ -637,7 +782,7 @@ class EEGAnalysis:
     def save_pickle(self):
         """
         Function to save epochs, labels and main information into pickle files. The first two are saved as numpy arrays,
-        the last one is saved as dictionary
+        the last one is saved as dictionary.
         """
 
         epochs = np.array(self.epochs.get_data())
@@ -655,20 +800,25 @@ class EEGAnalysis:
 
         print('Pickle files correctly saved')
 
-    def run_raw_epochs(self, visualize_raw=False, save_images=True, ica_analysis=False, create_evoked=True, save_pickle=True):
+    def run_raw_epochs(self, visualize_raw=False, save_images=True, ica_analysis=False, create_evoked=True,
+                       save_pickle=True):
         """
         Function to run all the methods previously reported. Attention: ICA is for now not used.
-        :param visualize_raw: boolean, if raw signals should be visualized or not
-        :param save_images: boolean, if epoch plots should be saved or not (note: they are never visualized)
-        :param ica_analysis: boolean, if ICA analysis should be performed
-        :param create_evoked: boolean, if Evoked computation is necessary
-        :param save_pickle: boolean, if the pickles with data, label and info should be saved
+
+        :param visualize_raw: Whether raw signals should be visualized.
+        :type visualize_raw: bool
+        :param save_images: Whether epoch plots should be saved. (note: they are never visualized)
+        :type save_images: bool
+        :param ica_analysis: Whether ICA analysis should be performed.
+        :type ica_analysis: bool
+        :param create_evoked: Whether Evoked computation is necessary.
+        :type create_evoked: bool
+        :param save_pickle: Whether the pickles with data, label and info should be saved.
+        :type save_pickle: bool
         """
 
-        self.create_raw()
-
         if visualize_raw:
-            self.visualize_raw()
+            self.visualize_eeg()
 
         if self.input_info['spatial_filtering'] is not None:
             self.raw_spatial_filtering()
@@ -677,7 +827,7 @@ class EEGAnalysis:
             self.raw_time_filtering()
 
         if visualize_raw:
-            self.visualize_raw()
+            self.visualize_eeg()
 
         if ica_analysis:
             self.raw_ica_remove_eog()
@@ -695,85 +845,62 @@ class EEGAnalysis:
         if save_pickle:
             self.save_pickle()
 
-    def run_raw(self, visualize_raw=False, ica_analysis=False):
+    # def run_combine_raw_epochs(self, visualize_raw=False, save_images=True, ica_analysis=False,
+    #                            create_evoked=True, save_pickle=True, new_raws=None):
+    #     """
+    #     Function to combine different raw data and to create the correspondent new epochs (it can be useful when the
+    #     acquisition is in more files)
+    #     :param visualize_raw: boolean, if raw signals should be visualized or not
+    #     :param save_images: boolean, if epoch plots should be saved or not (note: they are never visualized)
+    #     :param ica_analysis: boolean, if ICA analysis should be performed
+    #     :param create_evoked: boolean, if Evoked computation is necessary
+    #     :param save_pickle: boolean, if the pickles with data, label and info should be saved
+    #     :param new_raws: list of raws files to be concatenated after the current raw variable
+    #     :return:
+    #     """
+    #
+    #     if visualize_raw:
+    #         self.visualize_eeg()
+    #
+    #     if ica_analysis:
+    #         self.raw_ica_remove_eog()
+    #
+    #     self.create_epochs(visualize_epochs=save_images, set_annotations=False)
+    #     if save_images:
+    #         compute_erds(epochs=self.epochs, rois=self.input_info['rois'], fs=self.eeg_fs, t_min=self.t_min,
+    #                      f_min=self.input_info['erds'][0], f_max=self.input_info['erds'][1],
+    #                      path=self.file_info['output_images_folder'])
+    #     if create_evoked:
+    #         self.create_evoked()
+    #         if save_images:
+    #             self.visualize_evoked()
+    #     if save_pickle:
+    #         self.save_pickle()
+
+    def preprocess_raw(self, visualize_raw=False, ica_analysis=False):
         """
-        Function to run the analysis part regarding the RAW generation, filtering and annotation (it can be useful to
-        generate new raw files concatenating multiple raw, e.g. when the acquisition is in more files)
-        :param visualize_raw: boolean, if raw signals should be visualized or not
-        :param ica_analysis: boolean, if ICA analysis should be performed
+        Perform some preprocessing to the raw data stored in attribute :attr:`raw`.
+
+        Optionally calls (depending on settings) :meth:`raw_spatial_filtering`, :meth:`raw_time_filtering`,
+        :meth:`visualize_eeg`, and :meth:`raw_ica_remove_eog`.
+
+        :param visualize_raw: Whether to visualize the data after processing steps.
+        :type visualize_raw: bool
+        :param ica_analysis: Whether to perform EOG removal via ICA.
+        :type ica_analysis: bool
         """
 
-        self.create_raw()
-
-        if visualize_raw:
-            self.visualize_raw()
-
+        # Perform spatial and time filtering if user specified that in input info dict:
         if self.input_info['spatial_filtering'] is not None:
             self.raw_spatial_filtering()
-
         if self.input_info['filtering'] is not None:
             self.raw_time_filtering()
-
-        if visualize_raw:
-            self.visualize_raw()
 
         if ica_analysis:
             self.raw_ica_remove_eog()
 
-        self.create_annotations(full=self.input_info['full_annotation'])
-        self.raw.set_annotations(self.annotations)
-
-    def run_combine_raw_epochs(self, visualize_raw=False, save_images=True, ica_analysis=False,
-                               create_evoked=True, save_pickle=True, new_raws=None):
-        """
-        Function to combine different raw data and to create the correspondent new epochs (it can be useful when the
-        acquisition is in more files)
-        :param visualize_raw: boolean, if raw signals should be visualized or not
-        :param save_images: boolean, if epoch plots should be saved or not (note: they are never visualized)
-        :param ica_analysis: boolean, if ICA analysis should be performed
-        :param create_evoked: boolean, if Evoked computation is necessary
-        :param save_pickle: boolean, if the pickles with data, label and info should be saved
-        :param new_raws: list of raws files to be concatenated after the current raw variable
-        :return:
-        """
-
-        if not isinstance(new_raws, list):
-            new_raws = []
-
-        self.create_raw()
-
         if visualize_raw:
-            self.visualize_raw()
-
-        if self.input_info['spatial_filtering'] is not None:
-            self.raw_spatial_filtering()
-
-        if self.input_info['filtering'] is not None:
-            self.raw_time_filtering()
-
-        self.create_annotations(full=self.input_info['full_annotation'])
-        self.raw.set_annotations(self.annotations)
-
-        new_raws.insert(0, self.raw)
-        self.raw = mne.concatenate_raws(new_raws)
-
-        if visualize_raw:
-            self.visualize_raw()
-
-        if ica_analysis:
-            self.raw_ica_remove_eog()
-
-        self.create_epochs(visualize_epochs=save_images, set_annotations=False)
-        if save_images:
-            compute_erds(epochs=self.epochs, rois=self.input_info['rois'], fs=self.eeg_fs, t_min=self.t_min,
-                         f_min=self.input_info['erds'][0], f_max=self.input_info['erds'][1],
-                         path=self.file_info['output_images_folder'])
-        if create_evoked:
-            self.create_evoked()
-            if save_images:
-                self.visualize_evoked()
-        if save_pickle:
-            self.save_pickle()
+            self.visualize_eeg()
 
     def __getattr__(self, name):
         return 'EEGAnalysis does not have `{}` attribute.'.format(str(name))

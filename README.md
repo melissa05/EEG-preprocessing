@@ -21,7 +21,9 @@ The methods are implemented thanks to Python 3.7 and MNE package.
 
 ### How to run
 
-The repository can be cloned in the computer and the requirements can be found in `requirements.txt` file. 
+The repository can be cloned in the computer and the requirements can be found in `requirements.txt` file.
+
+Have a look at the documentation (`eeg-preprocessing.pdf`) to understand what the code can do and how.
 
 To run the whole analysis, it's necessary to create an instance of the class and to call a run function. 
 The constructor of the class takes in input the path to the .xdf file and a dictionary containing the following 
@@ -42,6 +44,7 @@ information (in quotes the keys of the different data are reported):
 * "t_min": time instant (in seconds) of the beginning of the epochs with respect to the marker
 * "t_max": time instant (in seconds) of the end of the epochs with respect to the marker
 * "full_annotation": 0 if just the last part of the annotation is considered (in case it's of type "value1/value2"), 1 if the whole annotation should be considered
+* "annotation_durations": dictionary of the annotations (keys) and their durations in seconds (values)
 * "epochs_reject_criteria": dictionary containing the threshold values for the epoch rejection according to the peak-to-peak amplitude
     * "eeg": amplitude for rejection according to eeg amplitude
     * "eog": amplitude for rejection according to eog amplitude
@@ -51,7 +54,7 @@ information (in quotes the keys of the different data are reported):
 * "erds": list containing the lower and the higher frequencies of the frequency range to be visualized in ERDS plots 
 * "bad_channels": dict containing keys correspondent to the participant code, values containing a list of channels labelled as bad
 
-The dictionary can be previously saved in a json file and loaded every time it's needed. An example of the json file can be found in `data/eeg/info.json`.
+The dictionary can be previously saved in a json file and loaded every time it is needed. An example of the json file is given by `info_example.json`.
 All the generated plots will be saved in `images/` folder, inside a sub-folder named 'subj-X', where X is the name of the participant extracted from the input path.  
 
 An example of the usage of the class can be found in `example.py`. To run the script it's necessary to download the data file at this [link](https://drive.google.com/file/d/1QJACAUq3nOzYe69RH_6mlofJCYqt4ZJf/view?usp=sharing) and save it in `data/eeg/`.
@@ -87,7 +90,8 @@ or can be called thanks to the following functions:
 * Spatial filtering with Laplacian
 * ICA for EOG
 * fix the problem of missing samples in the acquisition
-* check on the input values 
+* check on the input values
+* Proper documentation
 
 ## ERDS
 
