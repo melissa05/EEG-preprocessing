@@ -2,7 +2,7 @@
 	"lsl-version": "1.16",
 	"streams": {"EEGMarkers": "BrainVision RDA Markers", "EEGData": "BrainVision RDA", "Triggers": "PsychoPy"},
 	"montage": "standard_1020",
-	"filtering": {"low": 1,"high": 60,"notch": 50},
+	"filtering": {"low": 1, "high": 60, "notch": 50},
 	"spatial_filtering": "average",
 	"samples_remove": 0,
 	"t_min": -2,
@@ -14,5 +14,6 @@
 	"bad_epoch_names": [],
 	"erp": [0, 300],
 	"erds": [1, 45],
-	"bad_channels": {}
-}
+	"bad_channels": {},
+	"ica_exclude": {"P001": {"MI": [0, 3], "ME": [0, 2]}}
+	}

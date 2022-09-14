@@ -69,7 +69,7 @@ class EEGAnalysis:
     :vartype t_max:
     """
 
-    def __init__(self, paths, dict_info):
+    def __init__(self, paths, dict_info, per_run_inspection=False):
         """
         *Constructor* of the class: it initializes all the necessary variables, loads the xdf file with all the
         correspondent information.
@@ -105,7 +105,7 @@ class EEGAnalysis:
         self.t_min = self.input_info['t_min']  # start of each epoch
         self.t_max = self.input_info['t_max']  # end of each epoch
         # Load xdf files into raw variable:
-        self.load_raws_from_xdf()
+        self.load_raws_from_xdf(per_run_inspection)
 
     def get_info_from_path(self):
         """
@@ -128,7 +128,7 @@ class EEGAnalysis:
             subject = (file_names[0].split('subj_')[1]).split('_block')[0]
         elif self.input_info['lsl-version'] == '1.16':
             if '_task-' in file_names[0]:
-                subject = (file_names[0].split('sub-')[1]).split('_task')[0]
+                subject = (file_names[0].split('sub-')[2]).split('_task')[0]
             else:
                 subject = (file_names[0].split('sub-')[1]).split('_ses')[0]
         else:
@@ -148,10 +148,12 @@ class EEGAnalysis:
 
     def load_xdf(self, xdf_path):
         """
-        Loads xdf file from the filepath given in input. The function automatically divides the different streams in
-        the file according to the stream names given in attribute :attr:`input_info` and extracts their main
-        information. Saves the sampling frequency of the EEG acquisition in attribute :attr:`eeg_fs`. Appends EEG and
-        marker data of given file to attributes :attr:`eeg_signals`, :attr:`eeg_instants`, :attr:`marker_ids`,
+        Loads xdf file from the filepath given in input.
+
+        The function automatically divides the different streams in the file according to the stream names given in
+        attribute :attr:`input_info` and extracts their main information. EEG signals are converted from µV to V:
+        Saves the sampling frequency of the EEG acquisition in attribute :attr:`eeg_fs`. Appends EEG and marker data
+        of given file to attributes :attr:`eeg_signals`, :attr:`eeg_instants`, :attr:`marker_ids`,
         and :attr:`marker_instants`.
 
         Calls :meth:`load_channels`. Optionally calls :meth:`_fix_lost_samples`.
@@ -181,7 +183,7 @@ class EEGAnalysis:
             if stream_name == stream_names['EEGData']:
                 # EEG signal:
                 eeg_signal = dat[i]['time_series'][:, :32]  # Number of EEG channels should not be hardcoded.
-                eeg_signal = eeg_signal * 1e-6
+                eeg_signal = eeg_signal * 1e-6  # Convert to Volt
                 # EEG time instants:
                 eeg_instants = dat[i]['time_stamps']
                 # Sampling frequencies:
@@ -225,14 +227,20 @@ class EEGAnalysis:
         self.marker_ids.append(marker_ids)
         self.marker_instants.append(marker_instants)
 
-    def load_raws_from_xdf(self):
+    def load_raws_from_xdf(self, per_run_inspection=False):
         """
         Loads one or multiple xdf files into a raw object which is saved in the attribute :attr:`raw`. Populates
         attribute :attr:`info`.
 
+        If parameter `per_run_inspection` is True, the data of each xdf file (i.e. run) is plotted individually,
+        allowing the user to select bad channels. These bad channels will be interpolated as soon as the plot is closed.
+
         Gets called by constructor.
 
         Calls :meth:`load_xdf`, :meth:`create_annotations`, and :meth:`create_raw`.
+
+        :param per_run_inspection: Whether each run should be plotted individually and bad channels interpolated.
+        :type per_run_inspection: bool
         """
 
         # Load file after file:
@@ -249,6 +257,9 @@ class EEGAnalysis:
         for i in range(len(self.eeg_signals)):
             raw = self.create_raw(self.eeg_signals[i], self.eeg_instants[i])
             raw.set_annotations(self.annotations[i])
+            if per_run_inspection:
+                mne.viz.plot_raw(raw, title=f'Run {i}', block=True, show_first_samp=True)
+                raw.interpolate_bads()
             raws.append(raw)
         self.raw = mne.concatenate_raws(raws)
 
@@ -342,7 +353,11 @@ class EEGAnalysis:
         """
 
         # Create RawArray with MNE for the data:
-        raw = mne.io.RawArray(eeg_signal.T, self.info, first_samp=eeg_instants[0])
+        # I think there is something fishy here. Since I don't remove any samples in the beginning of my data, setting
+        # first_samp=0 works for me. The other approach gave me a time delay and my markers did not match my data.
+        # However, I do not think that my "fix" (first_samp=0) works for everyone.
+        # raw = mne.io.RawArray(eeg_signal.T, self.info, first_samp=eeg_instants[0])
+        raw = mne.io.RawArray(eeg_signal.T, self.info, first_samp=0)
 
         # Set montage setting according to the input:
         standard_montage = mne.channels.make_standard_montage(self.input_info['montage'])
@@ -375,8 +390,8 @@ class EEGAnalysis:
         """
 
         if signal:
-            viz_scaling = dict(eeg=1e-4, eog=1e-4, ecg=1e-4, bio=1e-7, misc=1e-5)  # Custom scaling for signals.
-            mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=50, show_first_samp=True)
+            viz_scaling = dict(eeg=5e-5, eog=5e-5, ecg=1e-4, bio=1e-7, misc=1e-5)  # Custom scaling for signals.
+            mne.viz.plot_raw(self.raw, scalings=viz_scaling, duration=20, show_first_samp=True)
         if psd:
             self.raw.plot_psd()
         if psd_topo:
@@ -413,9 +428,51 @@ class EEGAnalysis:
         if n_freq is not None:
             self.raw.notch_filter(freqs=n_freq, verbose=40)
 
+    def raw_inspect_ica_components(self):
+        """
+        Plots ICA components of attribute :attr:`raw`.
+
+        This function is intended to be used for the inspection of ICA components. See :meth:`raw_perform_ica` for
+        applying ICA.
+        """
+
+        eeg_raw = self.raw.copy().filter(l_freq=1, h_freq=None)
+
+        ica = mne.preprocessing.ICA(n_components=0.9, method='fastica', random_state=97)
+
+        ica.fit(eeg_raw)
+        ica.plot_sources(eeg_raw)
+        ica.plot_components()
+
+    def raw_perform_ica(self):
+        """
+        Removes ICA components according to ICA indices specified in attribute :attr:`input_info`.
+
+        Before applying ICA, :meth:`raw_inspect_ica_components` should be used to inspect the ICA components and choose
+        the ones to be removed.
+        """
+
+        eeg_raw = self.raw.copy().filter(l_freq=1, h_freq=None)
+
+        ica = mne.preprocessing.ICA(n_components=0.9, method='fastica', random_state=97)
+
+        ica.fit(eeg_raw)
+        if isinstance(self.input_info['ica_exclude'][self.file_info['subject']], dict):
+            ica.exclude = self.input_info['ica_exclude'][self.file_info['subject']][self.file_info['task']]
+        else:
+            ica.exclude = self.input_info['ica_exclude'][self.file_info['subject']]
+
+        reconst_raw = self.raw.copy()
+        ica.apply(reconst_raw)
+
+        self.raw = reconst_raw
+
     def raw_ica_remove_eog(self):
-        # I am not sure how exactly this works? Does it not take EOG channels? Afterwards, there are still blinks in
-        # the raw data...
+        """
+        Old method from Giulia. Deprecated. Will be removed with next commit.
+
+        Automatic removal of EOG components, as suggested by MNE, just does not work.
+        """
 
         n_components = list(self.channels_types.values()).count('eeg')
 
@@ -484,7 +541,8 @@ class EEGAnalysis:
                 if condition == 'edges': condition = 'canny'
                 triggers['description'].append(condition)
 
-            annotations.append(mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description']))
+            annotations.append(mne.Annotations(triggers['onsets'], triggers['duration'], triggers['description'],
+                                               orig_time=None))
 
         # Save MNE annotations:
         self.annotations = annotations
@@ -506,10 +564,13 @@ class EEGAnalysis:
         """
 
         # Create events and the event mapping from annotations already stored in raw:
-        self.events, self.event_mapping = mne.events_from_annotations(self.raw)
+        self.events, self.event_mapping = mne.events_from_annotations(self.raw, event_id=None, use_rounding=True)
 
         # Automatic rejection criteria for the epochs
-        reject_criteria = self.input_info['epochs_reject_criteria']
+        if 'eeg' in self.input_info['epochs_reject_criteria'].keys():
+            reject_criteria = self.input_info['epochs_reject_criteria']
+        else:
+            reject_criteria = self.input_info['epochs_reject_criteria'][self.file_info['subject']]
 
         # Generation of the epochs according to the events:
         self.epochs = mne.Epochs(self.raw, self.events, event_id=self.event_mapping, preload=True,
@@ -518,6 +579,11 @@ class EEGAnalysis:
         # Plot epochs, if wanted:
         if visualize_epochs:
             self.visualize_epochs(conditional_epoch=True, rois=rois)
+
+    # def save_epochs(self):
+    #     foldername = os.path.join((self.file_info['project_folder'], 'data', f'sub-{self.file_info["subject"][1:]}'))
+    #     fname = os.path.join((foldername, f'sub-{self.file_info["subject"]}_task-{self.file_info["task"]}-epo.fif'))
+    #     self.epochs.save(fname=fname, fmt='double', overwrite=True)
 
     def visualize_epochs(self, conditional_epoch=True, rois=True):
         """
@@ -845,59 +911,35 @@ class EEGAnalysis:
         if save_pickle:
             self.save_pickle()
 
-    # def run_combine_raw_epochs(self, visualize_raw=False, save_images=True, ica_analysis=False,
-    #                            create_evoked=True, save_pickle=True, new_raws=None):
-    #     """
-    #     Function to combine different raw data and to create the correspondent new epochs (it can be useful when the
-    #     acquisition is in more files)
-    #     :param visualize_raw: boolean, if raw signals should be visualized or not
-    #     :param save_images: boolean, if epoch plots should be saved or not (note: they are never visualized)
-    #     :param ica_analysis: boolean, if ICA analysis should be performed
-    #     :param create_evoked: boolean, if Evoked computation is necessary
-    #     :param save_pickle: boolean, if the pickles with data, label and info should be saved
-    #     :param new_raws: list of raws files to be concatenated after the current raw variable
-    #     :return:
-    #     """
-    #
-    #     if visualize_raw:
-    #         self.visualize_eeg()
-    #
-    #     if ica_analysis:
-    #         self.raw_ica_remove_eog()
-    #
-    #     self.create_epochs(visualize_epochs=save_images, set_annotations=False)
-    #     if save_images:
-    #         compute_erds(epochs=self.epochs, rois=self.input_info['rois'], fs=self.eeg_fs, t_min=self.t_min,
-    #                      f_min=self.input_info['erds'][0], f_max=self.input_info['erds'][1],
-    #                      path=self.file_info['output_images_folder'])
-    #     if create_evoked:
-    #         self.create_evoked()
-    #         if save_images:
-    #             self.visualize_evoked()
-    #     if save_pickle:
-    #         self.save_pickle()
-
-    def preprocess_raw(self, visualize_raw=False, ica_analysis=False):
+    def preprocess_raw(self, visualize_raw=False, ica_analysis=False, reference=None):
         """
         Perform some preprocessing to the raw data stored in attribute :attr:`raw`.
+        
+        Sets the reference channel if parameter `reference` is given.
 
         Optionally calls (depending on settings) :meth:`raw_spatial_filtering`, :meth:`raw_time_filtering`,
-        :meth:`visualize_eeg`, and :meth:`raw_ica_remove_eog`.
+        :meth:`visualize_eeg`, and :meth:`raw_perform_ica`.
 
         :param visualize_raw: Whether to visualize the data after processing steps.
         :type visualize_raw: bool
         :param ica_analysis: Whether to perform EOG removal via ICA.
         :type ica_analysis: bool
+        :param reference: List of channels to use as reference, or 'average' to use a virtual reference.
+        :type reference: str or list[str]
         """
+
+        if reference:
+            self.raw.set_eeg_reference(ref_channels=reference, projection=True)
+            self.raw.apply_proj()
+
+        if ica_analysis:
+            self.raw_perform_ica()
 
         # Perform spatial and time filtering if user specified that in input info dict:
         if self.input_info['spatial_filtering'] is not None:
             self.raw_spatial_filtering()
         if self.input_info['filtering'] is not None:
             self.raw_time_filtering()
-
-        if ica_analysis:
-            self.raw_ica_remove_eog()
 
         if visualize_raw:
             self.visualize_eeg()

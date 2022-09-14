@@ -53,6 +53,7 @@ information (in quotes the keys of the different data are reported):
 * "erp": list containing the time instants (in milliseconds) to be highlighted with a vertical line in ERP plot
 * "erds": list containing the lower and the higher frequencies of the frequency range to be visualized in ERDS plots 
 * "bad_channels": dict containing keys correspondent to the participant code, values containing a list of channels labelled as bad
+* "ica_exclude": dict containing keys correspondent to the participant code, values containing either a list of ICA indices to remove as values or another dictionary with tasks as keys and the list of ICA indices to remove as values.
 
 The dictionary can be previously saved in a json file and loaded every time it is needed. An example of the json file is given by `info_example.json`.
 All the generated plots will be saved in `images/` folder, inside a sub-folder named 'subj-X', where X is the name of the participant extracted from the input path.  
