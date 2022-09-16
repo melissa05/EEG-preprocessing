@@ -2,6 +2,7 @@ import os
 import pathlib
 import pickle
 from pathlib import Path
+import csv
 
 import mne
 import numpy as np
@@ -580,10 +581,40 @@ class EEGAnalysis:
         if visualize_epochs:
             self.visualize_epochs(conditional_epoch=True, rois=rois)
 
-    # def save_epochs(self):
-    #     foldername = os.path.join((self.file_info['project_folder'], 'data', f'sub-{self.file_info["subject"][1:]}'))
-    #     fname = os.path.join((foldername, f'sub-{self.file_info["subject"]}_task-{self.file_info["task"]}-epo.fif'))
-    #     self.epochs.save(fname=fname, fmt='double', overwrite=True)
+    def save_epochs(self, track_dropped=False):
+        """
+        Saves the epochs stored in attribute :attr:`epochs` (created by calling :meth:`create_epochs`).
+
+        If parameter `track_dropped` is true, the function counts how many epochs are dropped for each condition and
+        writes an entry (row) in a csv file, that has to be created by the user beforehand. CAUTION: This functionality
+        is pretty much hard-coded to my (Melissa's) needs (regarding tasks and conditions), but can be easily adapted.
+
+        :param track_dropped: Whether to count dropped epochs and save the numbers in a csv.
+        :type track_dropped: bool
+        """
+        dirname = os.path.join(self.file_info['project_folder'], 'data', f'sub-{self.file_info["subject"]}')
+        if not os.path.exists(dirname):
+            os.mkdir(dirname)
+        fname = os.path.join(dirname, f'sub-{self.file_info["subject"]}_task-{self.file_info["task"]}-epo.fif')
+        self.epochs.save(fname=fname, fmt='double', overwrite=True)
+
+        if track_dropped:
+            annos = list(self.epochs.annotations.description)
+            while 'BAD boundary' in annos:
+                annos.remove('BAD boundary')
+                annos.remove('EDGE boundary')
+            events_dropped = [e for i, e in enumerate(annos) if self.epochs.drop_log[i] != ()]
+            n_events_dropped = len(events_dropped)
+            n_both_dropped = len([e for e in events_dropped if e == 'both'])
+            n_left_dropped = len([e for e in events_dropped if e == 'left'])
+            n_right_dropped = len([e for e in events_dropped if e == 'right'])
+
+            dirname = os.path.join(self.file_info['project_folder'], 'data')
+            with open(f'{dirname}/dropped_events.csv', 'a') as csvfile:
+                writer = csv.writer(csvfile, delimiter=',', lineterminator='\n')
+                writer.writerow(
+                        [self.file_info['subject'], self.file_info['task'], n_both_dropped, n_left_dropped,
+                         n_right_dropped, n_events_dropped])
 
     def visualize_epochs(self, conditional_epoch=True, rois=True):
         """
