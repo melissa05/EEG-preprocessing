@@ -51,7 +51,7 @@ def compute_erds(epochs, rois, fs, t_min, f_min=0, f_max=50, path=None, subject=
 
     # for each different condition found in the epochs
     for condition in conditions:
-        fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+        fig, axes = plt.subplots(3, 2, figsize=(12, 14))
         fig.suptitle(condition)
         # for each region of interest
         for i, roi in enumerate(rois_numbers.keys()):
@@ -92,7 +92,7 @@ def compute_erds(epochs, rois, fs, t_min, f_min=0, f_max=50, path=None, subject=
             ax.axvline(0, color='k')
             fig.colorbar(p, ax=ax)
         if path is not None:
-            fig.savefig(f'{path}/P{subject}_{task}_{condition}_erds.png')
+            fig.savefig(f'{path}/P{subject}_{task}_{condition}_erds_ROIs.png')
         else:
             plt.show()
         plt.close()
@@ -186,11 +186,13 @@ if __name__ == '__main__':
     import mne
 
     subjects = ['001', '002', '003', '004', '005', '007', '008', '009', '010', '011', '012', '013', '014',
-                '015', '016', '017', '018', '019', '020', '021', '022', '023', '024', '025', '026', '027', '028',
-                '029', '030', '031']
+                '015', '016', '017', '018', '019', '021', '022', '023', '024', '025', '026', '028',
+                '029', '030', '031']  # Without 006, 020 and 027
     tasks = ['ME', 'MI']
-    rois = {"C3": ["FC5", "FC1", "C3", "CP5", "CP1"], "C4": ["FC2", "FC6", "C4", "CP2", "CP6"],
-            "F-L": ["F3", "FC5", "FC1", "C3"], "F-R": ["F4", "FC6", "FC2", "C4"]}
+    rois = {"FL": ["Fp1", "F7", "F3"], "FR": ["Fp2", "F4", "F8"],
+            "CL": ["FC5", "FC1", "C3", "CP5", "CP1"], "CR": ["FC2", "FC6", "C4", "CP2", "CP6"],
+            "PL": ["P7", "P3", "O1"], "PR": ["P4", "P8", "O2"]
+            }
 
     for subject in subjects:
         print('Subject: ', subject)
